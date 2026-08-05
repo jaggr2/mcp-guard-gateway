@@ -1,0 +1,8 @@
+{
+  "nanokvm_click_mouse":  { "guard": "hitl",   "timeout_action": "deny",   "ttl_minutes": 30 },
+  "nanokvm_screenshot":   { "guard": "reason", "timeout_action": null,     "ttl_minutes": null },
+  "nanokvm_type_text":    { "guard": "hitl",   "timeout_action": "deny",   "ttl_minutes": 30 },
+  "nanokvm_press_keys":   { "guard": "hitl",   "timeout_action": "deny",   "ttl_minutes": 30 },
+  "nanokvm_move_mouse":   { "guard": "reason", "timeout_action": null,     "ttl_minutes": null },
+  "nanokvm_scroll_mouse": { "guard": "reason", "timeout_action": null,     "ttl_minutes": null }
+}
