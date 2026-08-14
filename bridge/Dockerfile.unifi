@@ -3,8 +3,9 @@
 # the STDIO_ENV env var (set via the quadlet EnvironmentFile).
 FROM node:22-bookworm
 
-# uv from the official image (no apt/pip needed)
+# uv + uvx from the official image (no apt/pip needed)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 
 WORKDIR /app
 COPY package.json ./
