@@ -46,8 +46,9 @@ export interface SeedPolicy {
 
 export interface IssuerConfig {
   issuer: string;
-  jwksUrl: string;
-  userinfoUrl: string;
+  /** Optional overrides; resolved from the issuer's OIDC discovery document when absent. */
+  jwksUrl?: string;
+  userinfoUrl?: string;
   audience: string;
 }
 
@@ -70,8 +71,8 @@ export function loadConfig(env: Record<string, string | undefined>, protocolVers
     const issuer = env.AUTHELIA_ISSUER.replace(/\/$/, "");
     issuers.push({
       issuer,
-      jwksUrl: env.AUTHELIA_JWKS_URL ?? `${issuer}/api/oidc/jwks`,
-      userinfoUrl: env.AUTHELIA_USERINFO_URL ?? `${issuer}/api/oidc/userinfo`,
+      jwksUrl: env.AUTHELIA_JWKS_URL || undefined,
+      userinfoUrl: env.AUTHELIA_USERINFO_URL || undefined,
       audience: env.AUTHELIA_AUDIENCE ?? publicUrl,
     });
   }

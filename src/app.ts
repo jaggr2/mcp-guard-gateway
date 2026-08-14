@@ -47,8 +47,8 @@ export function createApp(env: Record<string, string | undefined>): Hono {
 
   // OAuth discovery ----------------------------------------------------------
   app.get("/.well-known/oauth-protected-resource", (c) => c.json(protectedResourceMetadata(config)));
-  app.get("/.well-known/oauth-authorization-server", (c) => {
-    const meta = authServerMetadata(config);
+  app.get("/.well-known/oauth-authorization-server", async (c) => {
+    const meta = await authServerMetadata(config);
     return meta ? c.json(meta) : c.json({ error: "no authorization server configured" }, 404);
   });
 

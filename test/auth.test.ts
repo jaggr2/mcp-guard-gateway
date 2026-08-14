@@ -47,7 +47,17 @@ beforeEach(async () => {
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     res.setHeader("Content-Type", "application/json");
-    if (url.pathname === "/api/oidc/jwks") {
+    if (url.pathname === "/.well-known/openid-configuration") {
+      res.end(
+        JSON.stringify({
+          issuer: baseUrl,
+          jwks_uri: `${baseUrl}/api/oidc/jwks`,
+          userinfo_endpoint: `${baseUrl}/api/oidc/userinfo`,
+          authorization_endpoint: `${baseUrl}/api/oidc/authorization`,
+          token_endpoint: `${baseUrl}/api/oidc/token`,
+        })
+      );
+    } else if (url.pathname === "/api/oidc/jwks") {
       res.end(JSON.stringify({ keys: [{ ...pubJwk, kid: "k1", alg: "RS256", use: "sig" }] }));
     } else if (url.pathname === "/api/oidc/userinfo") {
       res.end(JSON.stringify({ sub: "roger", email: "roger@jaggi.xyz", groups: ["admins", "operators"] }));
