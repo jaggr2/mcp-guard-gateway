@@ -1,7 +1,11 @@
-# Implementation Plan — MCP Guard Gateway (Cloudflare)
+# Implementation Plan — MCP Guard Gateway
 
-> **Purpose**: Step-by-step execution contract for a future opencode session.
-> Source of truth for behavior: `docs/ARCHITECTURE.md`.
+> **Status: SUPERSEDED.** This plan described the original Cloudflare Workers + Telegram
+> target. The project pivoted to a **self-hosted** deployment (Podman Quadlets on the home
+> server) with **Hermes** for HITL, **Authelia (OIDC)** for auth, multi-upstream + trust
+> pinning, and an Angular UI. Phases 1–5 are implemented in `src/`; deployment steps and
+> the current config checklist live in `docs/DEPLOYMENT.md`. The protocol decisions below
+> (async handleId, stateless gateway, server-side secrets) remain valid.
 
 ## Phase 1 — Scaffold Worker project
 
@@ -19,7 +23,7 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "mcp-guard", "database_id": "REPLACE_AFTER_CREATE" }
   ],
-  "vars": { "TG_WEBHOOK_PATH": "/tg-webhook" }
+  "vars": { "DISCORD_INTERACTIONS_PATH": "/discord" }
 }
 ```
 
@@ -31,18 +35,18 @@ Directory layout:
 
 ```
 src/
-  index.ts            // fetch() router: /mcp, /tg-webhook
+  index.ts            // fetch() router: /mcp, /discord
   mcp.ts              // createMcpHandler wiring, tools/list merge
   policy.ts           // policy.jsonc load + per-tool resolution + reason-schema injection
   guards/
     reason.ts         // Guard 1: validate reason, write audit
-    hitl.ts           // Guard 2: approvals row, Telegram card, poll/execute
+    hitl.ts           // Guard 2: approvals row, Discord card, poll/execute
   store/
     d1.ts             // D1 impl of audit+approvals (target for this deployment)
     types.ts          // store interface + row types
-  telegram/
-    client.ts         // sendMessage / editMessageReplyMarkup via fetch
-    webhook.ts        // inline-button callback -> store
+  discord/
+    client.ts         // sendMessage / editMessage via REST
+    interactions.ts   // button interaction -> store (Ed25519 verified)
   upstream/
     nanokvm.ts        // fetch proxy to NanoKVM with injected secrets, namespacing
   config.ts           // reads env + Workers Secrets
@@ -63,46 +67,47 @@ interface Store {
 
 ## Phase 3 — Guard 1 (reason + audit)
 
-- [ ] `policy.ts`: parse `examples/policy.jsonc`; `resolvePolicy(tool)` → `{guard, timeout_action, ttl_minutes}`
-- [ ] Inject required `reason` schema into guarded tools before returning `tools/list`
-- [ ] `tools/call` → `guards/reason.ts`: missing/blank reason → `-32602` error
-- [ ] Else insert audit row then continue to forward/HITL
-- [ ] `audit_query` tool implemented
+- [x] `policy.ts`: parse `examples/policy.jsonc`; `resolvePolicy(tool)` → `{guard, timeout_action, ttl_minutes}`
+- [x] Inject required `reason` schema into guarded tools before returning `tools/list`
+- [x] `tools/call` → `guards/reason.ts`: missing/blank reason → `-32602` error
+- [x] Else insert audit row then continue to forward/HITL
+- [x] `audit_query` tool implemented
 
-## Phase 4 — Guard 2 (HITL + Telegram)
+## Phase 4 — Guard 2 (HITL + Discord)
 
-- [ ] `guards/hitl.ts`: create approval row, send Telegram card (Approve/Deny inline keyboard)
-- [ ] `check_approval_status` tool: pending → wait/retry; approved → execute upstream, store result; denied/expired → error
-- [ ] Expiry check honors per-tool `timeout_action` (deny default / approve)
-- [ ] `telegram/webhook.ts`: callback `approval_id` + `approve|deny` → store update + edit card
-- [ ] `approvals_list` tool implemented
+- [x] `guards/hitl.ts`: create approval row, send Discord card (Approve/Deny buttons)
+- [x] `check_approval_status` tool: pending → wait/retry; approved → execute upstream, store result; denied/expired → error
+- [x] Expiry check honors per-tool `timeout_action` (deny default / approve)
+- [x] `discord/interactions.ts`: button `approve:<id>` / `deny:<id>` → store update + card edit (type-7 response, Ed25519-verified)
+- [x] `approvals_list` tool implemented
 
 ## Phase 5 — Upstream proxy (NanoKVM)
 
-- [ ] `upstream/nanokvm.ts`: forward `initialize`, `tools/list`, `tools/call`
-- [ ] Namespace tool names: `nanokvm_<name>`; strip prefix on forward, re-add on response
-- [ ] Inject headers from Workers Secrets: `CF-Access-Client-Id`, `CF-Access-Client-Secret`, `Authorization: Bearer <NANOKVM_API_KEY>`
-- [ ] Preserve SSE / JSON response content-types (screenshots pass through)
+- [x] `upstream/nanokvm.ts`: forward `tools/list`, `tools/call` (initialize is handled locally by the SDK Server)
+- [x] Namespace tool names: `nanokvm_<name>`; strip prefix on forward
+- [x] Inject headers from Workers Secrets: `CF-Access-Client-Id`, `CF-Access-Client-Secret`, `Authorization: Bearer <NANOKVM_API_KEY>`
+- [x] Preserve JSON / SSE upstream response parsing (screenshots pass through)
 
 ## Phase 6 — Cloudflare deploy
 
 - [ ] Create D1: `wrangler d1 create mcp-guard`; paste `database_id` into `wrangler.jsonc`
 - [ ] D1 migration `migrations/0001_init.sql` (audit + approvals tables per ARCHITECTURE §5)
-- [ ] `wrangler secret put CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` / `NANOKVM_API_KEY` / `TG_BOT_TOKEN`
+- [ ] `wrangler secret put CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` / `NANOKVM_API_KEY` / `DISCORD_BOT_TOKEN` / `DISCORD_PUBLIC_KEY`
 - [ ] `wrangler deploy`
 - [ ] Cloudflare Access app on the Worker route (service-token policy) — follow existing `nanokvm-uttigen.jaggi.xyz` pattern
 
-## Phase 7 — Telegram bot setup
+## Phase 7 — Discord bot setup
 
-- [ ] BotFather → create bot → copy `TG_BOT_TOKEN`
-- [ ] Register webhook: `POST https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<worker>/tg-webhook`
-- [ ] Verify callback payload parsing + card edit on resolve
+- [ ] Discord Developer Portal → new application → copy bot token (`DISCORD_BOT_TOKEN`) and public key (`DISCORD_PUBLIC_KEY`)
+- [ ] Invite the bot to the operator server with `Send Messages` permission; copy channel id (`DISCORD_CHANNEL_ID`)
+- [ ] Register Interactions endpoint URL: `https://<worker>/discord` (must end in `/discord`)
+- [ ] Verify button interaction parsing + card edit on resolve
 
 ## Phase 8 — End-to-end test matrix
 
 - [ ] `tools/call` Guard 1 tool with no `reason` → `-32602`
 - [ ] with `reason` → audit row present; `audit_query` returns it
-- [ ] Guard 2: approve via Telegram button → `check_approval_status` returns real upstream result
+- [ ] Guard 2: approve via Discord button → `check_approval_status` returns real upstream result
 - [ ] Guard 2: deny → error result
 - [ ] Guard 2: TTL expiry with `timeout_action: deny` → `expired`/denied (no execution)
 - [ ] Guard 2: TTL expiry with `timeout_action: approve` → executes (per-tool config)

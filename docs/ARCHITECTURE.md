@@ -1,7 +1,11 @@
 # MCP Guard Gateway — Target Architecture
 
-> **Status**: Implementation pending. This document is the authoritative spec that a
-> future opencode session will implement. Follow `docs/PLAN.md` for the execution order.
+> **Status: SUPERSEDED in parts.** The original spec targeted Cloudflare Workers + a
+> Telegram bot. The implemented architecture is **self-hosted** (Podman Quadlets on the
+> home server), multi-upstream, with **Authelia OIDC** auth and **Hermes** (Telegram DM)
+> for HITL. The non-negotiable protocol decisions in §4 (async handleId, stateless
+> gateway, server-side secrets) still govern. See `README.md` + `docs/DEPLOYMENT.md` for
+> the current design; the rest of this document is retained for protocol rationale.
 
 ## 1. Goal
 
@@ -12,8 +16,8 @@ governance before any tool executes:
 - **Guard 1 — Reason + Audit**: a guarded tool call MUST supply a `reason`; every call is
   recorded in an immutable audit log.
 - **Guard 2 — Human-in-the-Loop**: a guarded tool call is paused, the operator is notified
-  (Telegram inline buttons), and the call only executes after explicit approval (or the
-  per-tool timeout policy resolves it).
+  (Discord approval card with Approve/Deny buttons), and the call only executes after explicit
+  approval (or the per-tool timeout policy resolves it).
 
 The gateway is **provider-agnostic in core** and ships with a **Cloudflare Workers** target
 deployment. An AWS equivalent is documented as a migration path in `docs/AWS_ALTERNATIVE.md`.
@@ -39,7 +43,7 @@ Workers Gateway (single stateless Worker)
    ├── Policy engine: per-tool { guard, timeout_action, ttl_minutes }
    ├── intercepts tools/call
    │    ├─ Guard 1  → validate reason → D1 audit row
-   │    ├─ Guard 2  → approvals row + Telegram card → return { approval_id, status: "pending" }
+   │    ├─ Guard 2  → approvals row + Discord card → return { approval_id, status: "pending" }
    │    └─ approved / no-guard → forward to upstream with injected server-side secrets
    └── gateway-native tools: check_approval_status, audit_query, approvals_list
         │
@@ -50,7 +54,8 @@ https://nanokvm-uttigen.jaggi.xyz/api/mcp   (NanoKVM, reached server-side by the
 ### 3.1 Routing
 
 - `POST /mcp` — MCP Streamable HTTP endpoint (client-facing).
-- `POST /tg-webhook` — Telegram bot update webhook (inline-button callbacks).
+- `POST /discord` — Discord Interactions endpoint (button-click callbacks). The URL must end
+  in `/discord` and is signature-verified with the app's public key.
 - All other paths → 404.
 
 ## 4. Protocol decisions (non-negotiable)
@@ -79,8 +84,9 @@ Objects are required. The Worker can be freely redeployed/evicted.
 - Upstream secrets live in **Workers Secrets** (encrypted at rest):
   - `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` (for reaching NanoKVM behind Access)
   - `NANOKVM_API_KEY`
-  - `TG_BOT_TOKEN`
-- The Worker injects these when proxying to NanoKVM and when calling Telegram. They never
+  - `DISCORD_BOT_TOKEN`
+  - `DISCORD_PUBLIC_KEY` (verifies interaction signatures)
+- The Worker injects these when proxying to NanoKVM and when calling Discord. They never
   appear in client config, environment files, or the repository.
 
 ## 5. Data model (D1)
@@ -96,7 +102,7 @@ Objects are required. The Worker can be freely redeployed/evicted.
 | `args` | TEXT (JSON) | full arguments |
 | `reason` | TEXT | required for Guard 1 tools |
 | `decision` | TEXT | `auto-audited` \| `approved` \| `denied` \| `expired` |
-| `approved_by` | TEXT NULL | Telegram user id when HITL approved |
+| `approved_by` | TEXT NULL | Discord user id when HITL approved |
 | `upstream_status` | TEXT NULL | upstream result/error summary |
 | `expires_at` | TEXT NULL | HITL deadline |
 
@@ -114,8 +120,8 @@ Objects are required. The Worker can be freely redeployed/evicted.
 | `created_at` | TEXT | |
 | `expires_at` | TEXT | |
 | `result` | TEXT (JSON) NULL | upstream result once executed |
-| `tg_message_id` | INTEGER NULL | for editing the card on resolution |
-| `tg_user_id` | TEXT NULL | who resolved it |
+| `discord_message_id` | TEXT NULL | for editing the card on resolution |
+| `discord_user_id` | TEXT NULL | who resolved it |
 
 ## 6. Guard 1 — Reason + Audit
 
@@ -126,18 +132,20 @@ Objects are required. The Worker can be freely redeployed/evicted.
   2. Else → insert audit row (`decision: 'auto-audited'`), then forward upstream.
 - `audit_query(tool?, since?, caller_id?)` lets the operator inspect history.
 
-## 7. Guard 2 — HITL via Telegram
+## 7. Guard 2 — HITL via Discord
 
 1. `tools/call` on a Guard 2 tool → insert `approvals` row (`status: 'pending'`) →
-   send Telegram card:
-   `⚠ <tool> wants: <reason>` + `args: <json>` + inline buttons **Approve** / **Deny**.
-2. Telegram callback → `POST /tg-webhook` → update row (`approved`/`denied`, record `tg_user_id`).
+   send Discord card to the operator channel:
+   `⚠ <tool> wants: <reason>` + `args: <json>` + buttons **Approve** / **Deny**.
+2. Button click → Discord sends an interaction to `POST /discord` (Ed25519-verified) →
+   update row (`approved`/`denied`, record `discord_user_id`) and edit the card via a
+   type-7 interaction response.
 3. Agent polls `check_approval_status(id)`:
    - `pending` → wait and retry
    - `approved` → gateway executes upstream, stores `result`, poll returns it
    - `denied` → error result
    - `expired` → per-tool `timeout_action`: `deny` (default, fail-safe) or `approve`
-4. On resolution, edit the Telegram card to reflect the outcome.
+4. On resolution, edit the Discord card to reflect the outcome.
 
 ## 8. Policy configuration
 

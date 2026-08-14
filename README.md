@@ -1,39 +1,67 @@
 # MCP Guard Gateway
 
-Cloudflare Workers gateway that wraps HTTP MCP servers (starting with NanoKVM) and applies
-per-tool governance before execution:
+Self-hosted gateway that secures **HTTP MCP servers** (NanoKVM and any other) with
+per-tool governance, trust pinning, OIDC auth, Hermes-based human-in-the-loop approvals,
+and an Angular admin UI. Runs locally in **Podman Quadlets** on the home server, with
+Cloudflare Tunnel as the TLS edge.
 
-- **Guard 1 — Reason + Audit**: guarded tools require a `reason`; every call is written to a
-  durable audit log (D1).
-- **Guard 2 — Human-in-the-Loop**: guarded tools pause and require approval via Telegram
-  inline buttons before execution.
+- **Multi-upstream** — a DB-configured registry namespaces every upstream (`nanokvm_*`, …).
+- **Per-tool policy** — each tool is `enabled` or not, with guards `none | reason | hitl`
+  (+ timeout action/TTL). New tools are **disabled until reviewed** (fail-closed).
+- **Trust pinning** — the upstream's serverInfo + instructions + tool schemas are hashed
+  into a baseline; any drift is flagged and (by default) **blocks** the upstream + notifies
+  via Hermes. A hijacked remote MCP server can't smuggle in tools.
+- **Guard 1 — reason + audit** — guarded tools require `reason`; every call is audited.
+- **Guard 2 — HITL** — guarded calls return `{approval_id, pending}` immediately; the
+  operator approves/denies in their **Hermes Telegram DM**; the agent polls
+  `check_approval_status`.
+- **Auth** — MCP clients authenticate with **OAuth 2.1 against Authelia** (OIDC, PKCE,
+  WebAuthn 2FA); the admin UI sits behind Authelia forward-auth (Traefik). Machine clients
+  that can't do browser OAuth get gateway-issued service tokens.
+- **Angular admin UI** — upstreams, policy editor, trust/re-pin, audit, approvals, clients,
+  secrets (encrypted at rest), settings.
 
-> **Status**: Architecture + implementation plan only. No source code yet.
-> See `docs/ARCHITECTURE.md` (spec) and `docs/PLAN.md` (execution contract).
+## Status
+
+Implemented: core gateway (Hono + SQLite), multi-upstream registry + policies, trust
+pinning, OIDC/service-token auth, Hermes bridge client, admin API, Angular UI,
+hermes-bridge relay, GitOps quadlets, and Authelia provisioned on the server (user
+`roger`). **Not yet deployed** (needs CI image push + Cloudflare hostnames + quadlet
+start) — see `docs/DEPLOYMENT.md` for the full checklist.
 
 ## Repo layout
 
 ```
-docs/
-  ARCHITECTURE.md      # Target architecture spec (authoritative)
-  PLAN.md              # Step-by-step implementation plan for a future session
-  AWS_ALTERNATIVE.md   # Documented AWS/Lambda migration path
-examples/
-  policy.jsonc         # Sample per-tool guard table
+src/                     # gateway (Node 22 + Hono + SQLite)
+  app.ts                 # Hono app: /mcp, /.well-known/*, /api/*, Angular SPA
+  mcp.ts                 # SDK Server: tools/list merge + tools/call guards
+  config.ts              # env -> GatewayConfig (issuers, hermes, upstreams)
+  policy.ts              # per-tool {enabled, guard, timeout, ttl} resolution
+  auth/                  # multi-issuer JWT verify (jose), RFC 9728 metadata, middleware
+  trust/                 # baseline hashing + drift detection/blocking
+  upstream/              # generic MCP upstream client + DB-backed registry
+  hermes/bridge.ts       # Hermes MCP bridge client (cards + events)
+  guards/                # Guard 1 (reason+audit), Guard 2 (HITL)
+  store/                 # Store interface + SQLite + config repository
+  api/                   # admin REST API
+  db/schema.ts           # SQLite schema
+bridge/                  # hermes-bridge relay (`hermes mcp serve` over Streamable HTTP)
+web/                     # Angular 20 admin UI (standalone, signals)
+scripts/, test/, docs/   # smoke test, vitest suite, docs (ARCHITECTURE/PLAN/DEPLOYMENT)
 ```
 
-## Security model
+## Development
 
-- Client holds only the Cloudflare Access service token.
-- Upstream secrets (CF service token, NanoKVM API key, Telegram bot token) live in
-  Workers Secrets, injected server-side.
-- HITL uses the async handleId pattern (never blocks the MCP request) so it works with
-  every MCP client and keeps the gateway stateless.
+```bash
+npm install
+npm run check            # typecheck + vitest
+npm run dev              # tsx watch (local, DB at ./data/gateway.db)
+(cd web && npm run build)# build the admin UI
+npm run build            # bundle the gateway
+```
 
-## Roadmap
+Secrets/env: see `.env.example` and `docs/DEPLOYMENT.md`.
 
-1. Provider-agnostic core (policy engine, Guard 1, Guard 2, upstream proxy)
-2. Cloudflare deploy (Worker + D1 + Access)
-3. Telegram bot wiring
-4. End-to-end test matrix
-5. UniFi upstream (deferred: needs stdio→HTTP bridge + tunnel)
+## Deployment
+
+Full step-by-step + config checklist: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.

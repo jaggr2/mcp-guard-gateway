@@ -1,0 +1,14 @@
+node_modules/
+dist/
+web/dist/
+web/node_modules/
+.git/
+*.log
+.env
+.env.*
+!.env.example
+data/
+test/
+scripts/
+bridge/
+.github/

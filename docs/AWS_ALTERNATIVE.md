@@ -13,7 +13,7 @@ opencode ──► Lambda Function URL (RESPONSE_STREAM)
                 ▼
         Lambda (Node.js, @modelcontextprotocol/sdk)
         ├── Guard 1 → DynamoDB audit table
-        ├── Guard 2 → DynamoDB approvals table + Telegram card
+        ├── Guard 2 → DynamoDB approvals table + Discord card
         └── forward → NanoKVM (secrets from AWS Secrets Manager)
 ```
 
@@ -33,7 +33,7 @@ opencode ──► Lambda Function URL (RESPONSE_STREAM)
 | D1 `audit` / `approvals` | DynamoDB tables (on-demand, 25GB free) |
 | Workers Secrets | AWS Secrets Manager (or Lambda env + KMS) |
 | Cloudflare Access front door | Function URL auth: IAM / API-key header |
-| Telegram webhook `POST /tg-webhook` | Same Function URL route |
+| Discord interactions `POST /discord` | Same Function URL route |
 
 ## Implementation delta
 
@@ -50,7 +50,7 @@ opencode ──► Lambda Function URL (RESPONSE_STREAM)
 | Lambda | **$0** — always-free: 1M req + 400k GB-s/mo |
 | DynamoDB | **$0** — 25GB, 25RCU/25WCU (provisioned) or 2.5M/1M on-demand |
 | Function URL | **$0** |
-| Telegram | $0 |
+| Discord | $0 |
 | Overage | ~$0.20/M Lambda req; DDB on-demand pennies |
 
 ## Trade-offs vs Cloudflare
