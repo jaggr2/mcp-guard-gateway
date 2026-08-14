@@ -6,18 +6,18 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Angular frontend (if present)
-COPY web/package.json web/package-lock.json* ./web/
-RUN if [ -d web ]; then cd web && npm ci; fi
-
+# Gateway sources + deps
 COPY package*.json ./
 RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npx esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/index.js
 
-RUN if [ -d web/src ]; then cd web && npm run build; fi
+# Angular admin UI
+COPY web ./web
+RUN cd web && npm ci && npm run build
+
+RUN npx esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/index.js
 
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm
