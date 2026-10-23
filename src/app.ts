@@ -23,6 +23,7 @@ import {
   handleSandboxReverseProxy,
   renderSandboxPickerHtml,
   sweepIdleSandboxes,
+  WORKSPACE_B64,
 } from "./sandboxes/proxy";
 
 export interface AppRuntime {
@@ -69,7 +70,7 @@ export function createApp(env: Record<string, string | undefined>): Hono {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: "/",
+          Location: `/${WORKSPACE_B64}/session`,
           "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
         },
       });

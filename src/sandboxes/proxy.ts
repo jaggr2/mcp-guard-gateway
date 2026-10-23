@@ -4,15 +4,21 @@ import type { ConfigStore, ProjectRow } from "../store/config";
 
 const execFileAsync = promisify(execFile);
 
+/** Base64url of `/home/opencode/workspace` used by OpenCode Web's `/:dir/session` router. */
+export const WORKSPACE_PATH = "/home/opencode/workspace";
+export const WORKSPACE_B64 = Buffer.from(WORKSPACE_PATH, "utf8").toString("base64url");
+
+const initializedProjects = new Set<string>();
+
 /**
- * Wake-on-Visit Reverse Proxy & Idle Sandbox Manager.
+ * Wake-on-Visit Reverse Proxy, Auto-Project Initializer & Idle Sandbox Manager.
  *
  * Supports three routing modes simultaneously (so no Cloudflare wildcard is required!):
- *   1. Single-hostname mode on `oc.jaggi.xyz`:
- *      - `GET https://oc.jaggi.xyz/s/<project>` sets cookie `warden_sandbox=<project>` and redirects to `/`
- *      - All subsequent requests on `https://oc.jaggi.xyz/*` proxy to the active `warden_sandbox` cookie!
- *      - `GET https://oc.jaggi.xyz/picker` (or `/` with no cookie) renders a fast Sandbox Switcher page.
- *   2. Flat subdomain mode (`oc-<project>.jaggi.xyz`) — works with Cloudflare free `*.jaggi.xyz` SSL.
+ *   1. Single-hostname mode on `oc.jaggi.xyz` (and `derog-opencode.jaggi.xyz`):
+ *      - `GET /s/<project>` sets cookie `warden_sandbox=<project>` and redirects to `/<WORKSPACE_B64>/session`
+ *      - All subsequent requests on `/*` proxy to the active `warden_sandbox` cookie!
+ *      - `GET /picker` (or `/` with no cookie) renders a fast Sandbox Switcher page.
+ *   2. Flat subdomain mode (`oc-<project>.jaggi.xyz`).
  *   3. Nested subdomain mode (`<project>.oc.jaggi.xyz`).
  */
 
@@ -51,6 +57,96 @@ export async function runSandboxCtl(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Ensures the sandbox's OpenCode SQLite DB has initialized `/home/opencode/workspace`
+ * and set its display name to `project.slug` (instead of "workspace").
+ */
+export async function ensureSandboxProjectInitialized(
+  upstreamOrigin: string,
+  project: ProjectRow
+): Promise<void> {
+  if (initializedProjects.has(project.slug)) return;
+  try {
+    const base = upstreamOrigin.replace(/\/$/, "");
+    const curRes = await fetch(`${base}/project/current?directory=${encodeURIComponent(WORKSPACE_PATH)}`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!curRes.ok) return;
+    const cur = (await curRes.json()) as { id?: string; name?: string };
+    if (cur?.id && cur.name !== project.slug) {
+      await fetch(`${base}/project/${encodeURIComponent(cur.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: project.slug }),
+        signal: AbortSignal.timeout(2000),
+      });
+    }
+    initializedProjects.add(project.slug);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * External JS served at `/__warden-init.js` (permitted by OpenCode's `script-src 'self'` CSP).
+ * Pre-seeds `localStorage["opencode.global.dat:server"]` so `/home/opencode/workspace` is
+ * immediately open & expanded in OpenCode Web's sidebar, and adds a floating project switcher pill.
+ */
+export function renderWardenInitJs(project: ProjectRow): string {
+  const slugJson = JSON.stringify(project.slug);
+  const titleJson = JSON.stringify(`${project.displayName} · OpenCode`);
+  const wtJson = JSON.stringify(WORKSPACE_PATH);
+  const b64Json = JSON.stringify(WORKSPACE_B64);
+
+  return `(function(){
+  try {
+    var wt = ${wtJson};
+    var b64 = ${b64Json};
+    var slug = ${slugJson};
+    var key = "opencode.global.dat:server";
+    var raw = localStorage.getItem(key);
+    var data = raw ? JSON.parse(raw) : { list: [], projects: {}, lastProject: {}, recentlyClosed: {} };
+    data.projects = data.projects || {};
+    data.lastProject = data.lastProject || {};
+    data.recentlyClosed = data.recentlyClosed || {};
+    var scopes = ["local", window.location.origin];
+    for (var i = 0; i < scopes.length; i++) {
+      var s = scopes[i];
+      var list = Array.isArray(data.projects[s]) ? data.projects[s] : [];
+      var existing = list.find(function(p) { return p && p.worktree === wt; });
+      if (!existing) {
+        list.unshift({ worktree: wt, expanded: true });
+      } else {
+        existing.expanded = true;
+      }
+      data.projects[s] = list;
+      data.lastProject[s] = wt;
+    }
+    localStorage.setItem(key, JSON.stringify(data));
+    document.title = ${titleJson};
+    if (window.location.pathname === "/" && !window.location.search.includes("home=1")) {
+      window.history.replaceState(null, "", "/" + b64 + "/session");
+    }
+    window.addEventListener("DOMContentLoaded", function() {
+      if (document.getElementById("warden-switcher-pill")) return;
+      var pill = document.createElement("div");
+      pill.id = "warden-switcher-pill";
+      pill.style.cssText = "position:fixed;bottom:10px;right:12px;z-index:99999;background:#161b22ee;border:1px solid #30363d;color:#e6edf3;padding:4px 10px;border-radius:999px;font:12px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;display:flex;gap:8px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,0.4)";
+      var label = document.createElement("span");
+      label.textContent = "🛡️ " + slug;
+      label.style.fontWeight = "600";
+      var link = document.createElement("a");
+      link.href = "/picker";
+      link.textContent = "Switch Project";
+      link.style.cssText = "color:#58a6ff;text-decoration:none";
+      pill.appendChild(label);
+      pill.appendChild(link);
+      document.body.appendChild(pill);
+    });
+  } catch (e) {}
+})();\n`;
 }
 
 export function renderSandboxPickerHtml(projects: ProjectRow[], activeSlug: string | null): string {
@@ -105,7 +201,7 @@ export function renderSandboxPickerHtml(projects: ProjectRow[], activeSlug: stri
 <body>
   <div class="wrap">
     <h1>🛡️ OpenCode Project Sandboxes</h1>
-    <p class="sub">Select a project to switch <code>oc.jaggi.xyz</code> into that isolated sandbox${activeSlug ? ` (current: <code>${activeSlug}</code>)` : ""}.</p>
+    <p class="sub">Select a project to open its pre-configured workspace on <code>oc.jaggi.xyz</code>${activeSlug ? ` (current: <code>${activeSlug}</code>)` : ""}.</p>
     <div class="grid">${cards}</div>
     <div class="footer">
       Manage budgets, MCP policies &amp; provision new repos in <a href="https://warden.jaggi.xyz/sandboxes">Warden Control Plane ↗</a>
@@ -172,23 +268,60 @@ export async function handleSandboxReverseProxy(
     );
   }
 
+  const reqUrl = new URL(request.url);
+  if (reqUrl.pathname === "/__warden-init.js") {
+    return new Response(renderWardenInitJs(project), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   configStore.touchProjectActivity(slug, "running");
 
   const upstreamOrigin =
     configStore.getSetting(`sandbox.${slug}.upstreamUrl`) ?? `http://oc-${slug}.warden.internal:4096`;
-  const reqUrl = new URL(request.url);
   const targetUrl = `${upstreamOrigin.replace(/\/$/, "")}${reqUrl.pathname}${reqUrl.search}`;
 
+  // Use a 2.5s timeout ONLY for establishing the connection / receiving response headers
+  // so long-lived SSE streams (/global/event, /event) stay connected indefinitely!
+  const controller = new AbortController();
+  const connectTimer = setTimeout(() => controller.abort(), 2500);
+
   try {
+    const forwardHeaders = new Headers(request.headers);
+    forwardHeaders.delete("accept-encoding"); // ensure plain text/html so we can inject `/__warden-init.js`
+
     const res = await fetch(targetUrl, {
       method: request.method,
-      headers: request.headers,
+      headers: forwardHeaders,
       body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
       duplex: "half",
-      signal: AbortSignal.timeout(3000),
+      signal: controller.signal,
     } as RequestInit);
+    clearTimeout(connectTimer);
+
+    void ensureSandboxProjectInitialized(upstreamOrigin, project);
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (request.method === "GET" && contentType.includes("text/html")) {
+      const html = await res.text();
+      const injected = html.replace(
+        "<script type=\"module\"",
+        `<script src="/__warden-init.js"></script><script type="module"`
+      );
+      const outHeaders = new Headers(res.headers);
+      outHeaders.delete("content-length");
+      outHeaders.delete("content-encoding");
+      return new Response(injected, { status: res.status, headers: outHeaders });
+    }
+
     return res;
   } catch {
+    clearTimeout(connectTimer);
+    initializedProjects.delete(slug);
     void runSandboxCtl(sandboxCtlScript, ["start", slug]);
     return new Response(renderWakeSplashHtml(project), {
       status: 200,
