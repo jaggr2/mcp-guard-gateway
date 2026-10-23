@@ -2,6 +2,8 @@ import type { Deps } from "../deps";
 import type { CallToolResult, Tool } from "../types";
 import { errorResult, jsonResult } from "../types";
 import { checkApproval } from "../guards/hitl";
+import { processLearningProposal } from "../memory/learning";
+import { SecretBox } from "../secrets";
 
 /** Gateway-native tools exposed alongside the namespaced upstream tools. */
 export const GATEWAY_TOOLS: Tool[] = [
@@ -48,6 +50,43 @@ export const GATEWAY_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "warden_propose_learning",
+    description:
+      "Persist a reusable engineering gotcha, domain memory, or SKILL.md update into the central jaggr2/agent-memory repository so all OpenCode sandboxes benefit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["gotcha", "memory", "skill"],
+          description: "Classification of the learning.",
+        },
+        target_path: {
+          type: "string",
+          description: "Relative path in jaggr2/agent-memory (e.g. 'memories/aws-cdk-gotchas.md' or 'skills/my-skill/SKILL.md').",
+        },
+        title: {
+          type: "string",
+          description: "Concise heading/title of the lesson or skill.",
+        },
+        content: {
+          type: "string",
+          description: "Markdown body to append (or full SKILL.md content when mode='replace').",
+        },
+        mode: {
+          type: "string",
+          enum: ["append", "replace"],
+          description: "Whether to append a section to target_path (default) or replace the file.",
+        },
+        rationale: {
+          type: "string",
+          description: "Why this learning is reusable across sessions/projects.",
+        },
+      },
+      required: ["kind", "target_path", "title", "content"],
+    },
+  },
 ];
 
 export const GATEWAY_TOOL_NAMES = new Set(GATEWAY_TOOLS.map((tool) => tool.name));
@@ -89,6 +128,54 @@ export async function callGatewayTool(
         limit: typeof args.limit === "number" ? args.limit : undefined,
       });
       return jsonResult({ rows });
+    }
+    case "warden_propose_learning": {
+      const kind = args.kind as "gotcha" | "memory" | "skill";
+      const targetPath = typeof args.target_path === "string" ? args.target_path : "";
+      const title = typeof args.title === "string" ? args.title : "";
+      const content = typeof args.content === "string" ? args.content : "";
+      if (!targetPath || !title || !content) {
+        return errorResult("Missing required fields: kind, target_path, title, content");
+      }
+
+      const secretBox = new SecretBox(deps.config.masterKey);
+      const decryptedSecrets: string[] = [];
+      for (const ct of deps.configStore.listSecretCiphertexts()) {
+        try {
+          decryptedSecrets.push(secretBox.decrypt(ct));
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const res = processLearningProposal(
+        deps.configStore,
+        deps.config.agentMemoryDir,
+        {
+          sourceProject: deps.callerId || "unknown",
+          kind: kind === "skill" || kind === "memory" ? kind : "gotcha",
+          targetPath,
+          title,
+          content,
+          mode: args.mode === "replace" ? "replace" : "append",
+          rationale: typeof args.rationale === "string" ? args.rationale : undefined,
+        },
+        decryptedSecrets
+      );
+
+      if (!res.ok) {
+        return errorResult(res.error);
+      }
+      await deps.hermes.notify(
+        `🧠 New learning recorded from '${deps.callerId}': ${title} (${res.learning.targetPath})`
+      );
+      return jsonResult({
+        ok: true,
+        learning_id: res.learning.id,
+        target_path: res.learning.targetPath,
+        commit_ref: res.learning.commitRef,
+        status: res.learning.status,
+      });
     }
     default:
       return errorResult(`Unknown gateway tool: ${name}`);

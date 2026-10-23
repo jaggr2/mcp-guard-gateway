@@ -17,9 +17,18 @@ import { NoopHermesBridge } from "./hermes/bridge";
 import { injectReasonSchema, requiresReason, resolvePolicy } from "./policy";
 import { startApproval } from "./guards/hitl";
 import { assertReason, extractReason, recordAudit, stripReason } from "./guards/reason";
+import {
+  enforceRepoBoundary,
+  isUpstreamAllowedForProject,
+  LoopCircuitBreaker,
+  sanitizeInboundToolResult,
+  scanOutboundSecrets,
+} from "./guards/security";
 import { callGatewayTool, GATEWAY_TOOLS, GATEWAY_TOOL_NAMES } from "./tools/gateway";
 import type { CallToolResult, Tool } from "./types";
 import { errorResult, jsonResult } from "./types";
+
+const circuitBreaker = new LoopCircuitBreaker();
 
 export function buildDeps(
   config: GatewayConfig,
@@ -54,18 +63,22 @@ function firstText(result: CallToolResult): string {
 
 /**
  * Builds the MCP server. `tools/list` merges every configured, pinned, enabled
- * upstream (namespaced) with the gateway-native tools; `tools/call` applies the
- * per-tool policy guards before forwarding.
+ * upstream (namespaced & filtered by per-project ACLs) with the gateway-native tools;
+ * `tools/call` applies the MCP Security Fortress guards before and after forwarding.
  */
 export function buildMcpServer(deps: Deps): Server {
   const server = new Server(
-    { name: "mcp-guard-gateway", version: "0.1.0" },
+    { name: "warden-gateway", version: "0.2.0" },
     { capabilities: { tools: {} } }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    const callerProject = deps.configStore.getProject(deps.callerId);
     const tools: Tool[] = [];
     for (const client of deps.registry.list()) {
+      if (!isUpstreamAllowedForProject(callerProject, client.namespace)) {
+        continue; // hidden from sandboxes not granted this upstream
+      }
       const check = await deps.trust.checkAndServe(client.namespace, client);
       if (!check.ok) {
         // Blocked (unpinned/drift/error) — omit this upstream's tools entirely.
@@ -109,6 +122,21 @@ async function callTool(
     return errorResult(`Unknown tool: ${name}`);
   }
 
+  const callerProject = deps.configStore.getProject(deps.callerId);
+  if (!isUpstreamAllowedForProject(callerProject, client.namespace)) {
+    await recordAudit(
+      { store: deps.store, callerId: deps.callerId },
+      name,
+      args,
+      undefined,
+      "denied",
+      { upstreamStatus: "blocked by project allowed_upstreams" }
+    );
+    return errorResult(
+      `[Warden ACL Guard] Sandbox '${deps.callerId}' is not permitted to use upstream '${client.namespace}'`
+    );
+  }
+
   const policy = resolvePolicy(deps.configStore, client.namespace, name);
   if (!policy.enabled) {
     return errorResult(`Tool "${name}" is disabled`);
@@ -119,6 +147,52 @@ async function callTool(
 
   if (requiresReason(policy)) {
     assertReason(reason); // throws JSON-RPC -32602 on missing/blank reason
+  }
+
+  // Guard: Repo boundary check for GitHub tools
+  const repoGuard = enforceRepoBoundary(callerProject, name, cleanArgs);
+  if (!repoGuard.ok) {
+    await recordAudit(
+      { store: deps.store, callerId: deps.callerId },
+      name,
+      cleanArgs,
+      reason,
+      "denied",
+      { upstreamStatus: repoGuard.reason }
+    );
+    return errorResult(repoGuard.reason);
+  }
+
+  // Guard: Outbound secret leak check
+  const secretBox = new SecretBox(deps.config.masterKey);
+  const decryptedSecrets: string[] = [];
+  for (const ct of deps.configStore.listSecretCiphertexts()) {
+    try {
+      decryptedSecrets.push(secretBox.decrypt(ct));
+    } catch {
+      /* ignore */
+    }
+  }
+  const secretScan = scanOutboundSecrets(cleanArgs, decryptedSecrets);
+  if (!secretScan.ok) {
+    const msg = `[Warden Secret Guard] Blocked outbound tool call containing leaked credential (${secretScan.match})`;
+    await recordAudit(
+      { store: deps.store, callerId: deps.callerId },
+      name,
+      { redacted: true },
+      reason,
+      "denied",
+      { upstreamStatus: msg }
+    );
+    void deps.hermes.notify(`${msg} from caller '${deps.callerId}' on tool '${name}'`);
+    return errorResult(msg);
+  }
+
+  // Guard: Loop & velocity circuit breaker
+  const loopCheck = circuitBreaker.checkBeforeCall(deps.callerId, name, cleanArgs);
+  if (!loopCheck.ok) {
+    void deps.hermes.notify(loopCheck.reason);
+    return errorResult(loopCheck.reason);
   }
 
   if (policy.guard === "hitl") {
@@ -132,6 +206,17 @@ async function callTool(
   } catch (err) {
     result = errorResult(
       `Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  circuitBreaker.recordOutcome(deps.callerId, name, cleanArgs, Boolean(result.isError));
+
+  // Guard: Inbound prompt-injection & hidden-Unicode sanitizer
+  const sanitized = sanitizeInboundToolResult(result);
+  result = sanitized.result;
+  if (sanitized.sanitizedFlags.length > 0) {
+    void deps.hermes.notify(
+      `⚠️ [Warden Prompt-Injection Guard] Sanitized ${sanitized.sanitizedFlags.join(", ")} in response from '${name}'`
     );
   }
 

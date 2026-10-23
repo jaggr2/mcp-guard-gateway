@@ -11,8 +11,17 @@ import { authenticateMcp } from "./auth/middleware";
 import { authServerMetadata, bearerChallenge, protectedResourceMetadata } from "./auth/metadata";
 import { registerApi } from "./api";
 import { bootstrap } from "./bootstrap";
-import { HermesBridgeImpl, type HermesBridge } from "./hermes/bridge";
+import { type HermesBridge } from "./hermes/bridge";
+import { HomeAssistantNotifier } from "./notify/homeassistant";
 import { ConfigStore } from "./store/config";
+import { SecretBox } from "./secrets";
+import { handleLlmProxy } from "./llm/proxy";
+import { handleAwsCredsBroker, handleGitCredsBroker } from "./brokers/credentials";
+import {
+  extractSandboxSlugFromHost,
+  handleSandboxReverseProxy,
+  sweepIdleSandboxes,
+} from "./sandboxes/proxy";
 
 export interface AppRuntime {
   config: GatewayConfig;
@@ -28,21 +37,38 @@ export function createApp(env: Record<string, string | undefined>): Hono {
   bootstrap(config, db);
 
   const configStore = new ConfigStore(db);
-  const hermes = new HermesBridgeImpl({
-    bridgeUrl: config.hermesBridgeUrl,
-    conversationKey: configStore.getSetting("hermes.conversationKey"),
-    store: buildDeps(config, db, "system", []).store,
+  const secrets = new SecretBox(config.masterKey);
+  const baseDeps = buildDeps(config, db, "system", []);
+  const notifier = new HomeAssistantNotifier({
+    hassUrl: config.hassUrl ?? configStore.getSetting("hass.url"),
+    hassToken: config.hassToken,
+    notifyService: config.hassNotifyService,
+    publicUrl: config.publicUrl,
+    store: baseDeps.store,
   });
-  void hermes.start().catch(() => undefined);
+  void notifier.start().catch(() => undefined);
 
-  const runtime: AppRuntime = { config, db, hermes };
+  const runtime: AppRuntime = { config, db, hermes: notifier };
   const app = new Hono();
 
-  startBackgroundTasks(config, db);
+  startBackgroundTasks(config, db, notifier);
+
+  // Wake-on-visit reverse proxy when Host is `<project>.oc.jaggi.xyz` ----------
+  app.use("*", async (c, next) => {
+    const slug = extractSandboxSlugFromHost(c.req.header("host"));
+    if (slug) {
+      return handleSandboxReverseProxy(c.req.raw, slug, configStore, config.sandboxCtlScript);
+    }
+    if (c.req.header("host")?.split(":")[0].toLowerCase() === "oc.jaggi.xyz" && c.req.path === "/") {
+      return c.redirect(`${config.publicUrl}/sandboxes`, 302);
+    }
+    await next();
+  });
 
   app.get("/healthz", (c) => {
     const upstreams = configStore.listUpstreams().length;
-    return c.json({ ok: true, upstreams });
+    const sandboxes = configStore.listProjects().length;
+    return c.json({ ok: true, service: "warden", upstreams, sandboxes });
   });
 
   // OAuth discovery ----------------------------------------------------------
@@ -55,8 +81,22 @@ export function createApp(env: Record<string, string | undefined>): Hono {
   // MCP Streamable HTTP ------------------------------------------------------
   app.all("/mcp", async (c) => handleMcp(c.req.raw, runtime));
 
+  // Agent LLM Cost & Subscription Quota Proxy (/llm/:provider/*) -------------
+  app.all("/llm/:provider/*", async (c) => {
+    const provider = c.req.param("provider");
+    const prefix = `/llm/${provider}/`;
+    const subpath = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "";
+    return handleLlmProxy(c.req.raw, provider, subpath, config, configStore, secrets, notifier);
+  });
+
+  // Zero-Secret Sandbox Credential Brokers (/aws-creds, /git-creds) ----------
+  app.get("/aws-creds", async (c) =>
+    handleAwsCredsBroker(c.req.raw, configStore, baseDeps.store, secrets, notifier)
+  );
+  app.get("/git-creds", async (c) => handleGitCredsBroker(c.req.raw, configStore, secrets));
+
   // Admin API ----------------------------------------------------------------
-  registerApi(app, config, db);
+  registerApi(app, config, db, notifier);
 
   // Angular SPA --------------------------------------------------------------
   app.use("*", serveStatic({ root: WEB_ROOT }));
@@ -94,12 +134,13 @@ async function handleMcp(request: Request, runtime: AppRuntime): Promise<Respons
 }
 
 /**
- * Background jobs: pin any seeded/configured upstream that has no baseline yet
- * (fail-closed if unreachable), then re-verify all upstreams' trust baselines
- * every 10 minutes and notify via Hermes on drift.
+ * Background jobs:
+ *   1. Pin any seeded/configured upstream that has no baseline yet (fail-closed if unreachable).
+ *   2. Re-verify all upstreams' trust baselines every 10 minutes and notify Home Assistant on drift.
+ *   3. Sweep idle `auto-stop` OpenCode sandboxes every 5 minutes.
  */
-function startBackgroundTasks(config: GatewayConfig, db: Database.Database): void {
-  const deps = buildDeps(config, db, "system", []);
+function startBackgroundTasks(config: GatewayConfig, db: Database.Database, notifier: HermesBridge): void {
+  const deps = buildDeps(config, db, "system", [], notifier);
 
   void (async () => {
     for (const client of deps.registry.list()) {
@@ -114,10 +155,17 @@ function startBackgroundTasks(config: GatewayConfig, db: Database.Database): voi
     }
   })();
 
-  const timer = setInterval(() => {
+  const trustTimer = setInterval(() => {
     deps.trust.verifyAll().catch(() => undefined);
   }, 10 * 60_000);
-  if (typeof timer.unref === "function") {
-    timer.unref();
+  if (typeof trustTimer.unref === "function") {
+    trustTimer.unref();
+  }
+
+  const idleTimer = setInterval(() => {
+    sweepIdleSandboxes(deps.configStore, config.sandboxCtlScript).catch(() => undefined);
+  }, 5 * 60_000);
+  if (typeof idleTimer.unref === "function") {
+    idleTimer.unref();
   }
 }

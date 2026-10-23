@@ -18,22 +18,38 @@ function splitGroups(header: string | null): string[] {
     .filter(Boolean);
 }
 
-/** Validates a gateway-issued machine service token against the clients table. */
-function verifyServiceToken(configStore: ConfigStore, token: string): { clientId: string; name: string; scopes: string[] } | null {
+/** Validates a gateway-issued machine service token or project sandbox token. */
+function verifyServiceToken(
+  configStore: ConfigStore,
+  token: string
+): { clientId: string; name: string; scopes: string[] } | null {
   const hash = createHash("sha256").update(token).digest("hex");
   for (const client of configStore.listClients()) {
     if (client.enabled && client.secretHash === hash) {
-      return { clientId: client.id, name: client.name, scopes: client.scopes.split(/[\s,]+/).filter(Boolean) };
+      return {
+        clientId: client.id,
+        name: client.name,
+        scopes: client.scopes.split(/[\s,]+/).filter(Boolean),
+      };
     }
+  }
+  const project = configStore.getProjectByTokenHash(hash);
+  if (project) {
+    configStore.touchProjectActivity(project.slug);
+    return {
+      clientId: `sandbox:${project.slug}`,
+      name: project.slug,
+      scopes: ["mcp", "llm", "sandbox"],
+    };
   }
   return null;
 }
 
 /**
  * Authenticates an /mcp request. When OIDC issuers are configured, a valid
- * Bearer token is REQUIRED (OIDC JWT or gateway service token); otherwise the
- * request is treated as anonymous (dev mode) with the forward-auth identity
- * header as the caller id.
+ * Bearer token is REQUIRED (OIDC JWT, gateway service token, or project sandbox token);
+ * otherwise the request is treated as anonymous (dev mode) with the forward-auth
+ * identity header as the caller id.
  */
 export async function authenticateMcp(
   request: Request,
@@ -48,7 +64,11 @@ export async function authenticateMcp(
     if (verified) {
       const claims = verified.claims;
       const clientId =
-        typeof claims.azp === "string" ? claims.azp : typeof claims.client_id === "string" ? claims.client_id : "unknown";
+        typeof claims.azp === "string"
+          ? claims.azp
+          : typeof claims.client_id === "string"
+            ? claims.client_id
+            : "unknown";
       return {
         authInfo: {
           token,

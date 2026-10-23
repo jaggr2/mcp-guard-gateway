@@ -5,9 +5,9 @@ import { ConfigStore } from "./store/config";
 import { SecretBox } from "./secrets";
 
 /**
- * Seeds the configuration tables on first boot: the bootstrap upstream (from
- * env), plus the full SEED_UPSTREAMS / SEED_SECRETS / SEED_POLICIES sets used to
- * register NanoKVM + UniFi and store their credentials encrypted at rest.
+ * Seeds the configuration tables on first boot: upstreams, secrets, policies,
+ * default OpenCode project sandboxes (`rsearch`, `calendar-m365-google-sync`, `agent-memory`),
+ * and the default 07:00 Morning Digest schedule.
  * Never overwrites existing rows.
  */
 export function bootstrap(config: GatewayConfig, db: Database.Database): void {
@@ -15,11 +15,25 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
   const secrets = new SecretBox(config.masterKey);
 
   if (config.bootstrapUpstream) {
-    seedUpstream(configStore, config.bootstrapUpstream.namespace, config.bootstrapUpstream.namespace, config.bootstrapUpstream.url, "block", {});
+    seedUpstream(
+      configStore,
+      config.bootstrapUpstream.namespace,
+      config.bootstrapUpstream.namespace,
+      config.bootstrapUpstream.url,
+      "block",
+      {}
+    );
   }
 
   for (const up of config.seedUpstreams) {
-    seedUpstream(configStore, up.namespace, up.displayName ?? up.namespace, up.url, up.driftAction ?? "block", up.headerMap ?? {});
+    seedUpstream(
+      configStore,
+      up.namespace,
+      up.displayName ?? up.namespace,
+      up.url,
+      up.driftAction ?? "block",
+      up.headerMap ?? {}
+    );
   }
 
   for (const [name, value] of Object.entries(config.seedSecrets)) {
@@ -42,6 +56,78 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
   seedSetting(configStore, "hermes.bridgeUrl", config.hermesBridgeUrl);
   if (config.hermesConversationKey) {
     seedSetting(configStore, "hermes.conversationKey", config.hermesConversationKey);
+  }
+  if (config.hassUrl) {
+    seedSetting(configStore, "hass.url", config.hassUrl);
+  }
+
+  // Seed default OpenCode sandboxes if none exist yet
+  const defaultProjects = [
+    {
+      slug: "rsearch",
+      displayName: "rsearch (Strands + Angular + CDK)",
+      repoUrl: "https://github.com/jaggr2/rsearch",
+      template: "fullstack" as const,
+      lifecycleMode: "auto-stop" as const,
+      allowedUpstreams: "github,aws,playwright",
+    },
+    {
+      slug: "calendar-m365-google-sync",
+      displayName: "Calendar M365 ↔ Google Sync",
+      repoUrl: "https://github.com/jaggr2/calendar-m365-google-sync",
+      template: "cdk" as const,
+      lifecycleMode: "auto-stop" as const,
+      allowedUpstreams: "github,aws,playwright",
+    },
+    {
+      slug: "agent-memory",
+      displayName: "Central Agent Memory & Skills",
+      repoUrl: "https://github.com/jaggr2/agent-memory",
+      template: "minimal" as const,
+      lifecycleMode: "auto-stop" as const,
+      allowedUpstreams: "github",
+    },
+  ];
+
+  for (const dp of defaultProjects) {
+    if (!configStore.getProject(dp.slug)) {
+      configStore.upsertProject({
+        slug: dp.slug,
+        displayName: dp.displayName,
+        repoUrl: dp.repoUrl,
+        template: dp.template,
+        lifecycleMode: dp.lifecycleMode,
+        idleTimeoutMinutes: 120,
+        dailyBudgetUsd: 5.0,
+        monthlyBudgetUsd: 30.0,
+        hourlyTokenCap: 500_000,
+        dailyTokenCap: 2_500_000,
+        awsRoleArn: null,
+        awsDeployRoleArn: null,
+        allowedUpstreams: dp.allowedUpstreams,
+        tokenHash: null,
+        status: "stopped",
+        branch: "main",
+        dirtyFiles: 0,
+        lastActiveAt: null,
+      });
+    }
+  }
+
+  // Seed default 07:00 Morning Digest cron job (replaces Hermes morning-digest cron)
+  if (configStore.listSchedules().length === 0) {
+    configStore.upsertSchedule({
+      id: randomUUID(),
+      name: "morning-digest",
+      cronExpr: "0 7 * * *",
+      project: "system",
+      model: "deepseek-v4-flash",
+      prompt:
+        "Produce a concise (<200 words) morning briefing covering: 1. Home Assistant status, 2. Homelab backup tiers, ZFS health & Incus instances, 3. OpenCode sandbox spend & any pending approvals.",
+      allowedUpstreams: "*",
+      deliveryTarget: "ha_notify",
+      enabled: true,
+    });
   }
 }
 

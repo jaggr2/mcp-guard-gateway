@@ -1,7 +1,17 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { lastValueFrom } from 'rxjs';
-import type { Approval, AuditRow, ClientRow, StatusInfo, ToolEntry, Upstream } from './models';
+import type {
+  Approval,
+  AuditRow,
+  ClientRow,
+  LearningEntry,
+  SandboxEntry,
+  ScheduleEntry,
+  StatusInfo,
+  ToolEntry,
+  Upstream,
+} from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -29,6 +39,71 @@ export class ApiService {
     return this.request<StatusInfo>('GET', '/status');
   }
 
+  // Sandboxes -----------------------------------------------------------------
+  listSandboxes() {
+    return this.request<{ sandboxes: SandboxEntry[] }>('GET', '/sandboxes');
+  }
+
+  createSandbox(body: {
+    slug: string;
+    displayName?: string;
+    template?: string;
+    lifecycleMode?: string;
+    dailyBudgetUsd?: number;
+    monthlyBudgetUsd?: number;
+    allowedUpstreams?: string;
+    awsRoleArn?: string;
+  }) {
+    return this.request<{ ok: boolean; slug: string; url: string; repoUrl: string; sandboxToken: string }>(
+      'POST',
+      '/sandboxes',
+      body,
+    );
+  }
+
+  sandboxAction(slug: string, action: 'start' | 'stop' | 'restart' | 'snapshot') {
+    return this.request<{ ok: boolean; status: string }>('POST', `/sandboxes/${slug}/${action}`);
+  }
+
+  deleteSandbox(slug: string) {
+    return this.request<{ ok: boolean }>('DELETE', `/sandboxes/${slug}`);
+  }
+
+  // Central Memory (`jaggr2/agent-memory`) & Cron Schedules -------------------
+  listLearnings() {
+    return this.request<{ learnings: LearningEntry[] }>('GET', '/learnings');
+  }
+
+  createLearning(body: {
+    sourceProject?: string;
+    kind: 'gotcha' | 'memory' | 'skill';
+    targetPath: string;
+    title: string;
+    content: string;
+    rationale?: string;
+  }) {
+    return this.request<{ ok: boolean; learning: LearningEntry }>('POST', '/learnings', body);
+  }
+
+  listSchedules() {
+    return this.request<{ schedules: ScheduleEntry[] }>('GET', '/schedules');
+  }
+
+  createSchedule(body: {
+    name: string;
+    cronExpr: string;
+    project?: string;
+    model?: string;
+    prompt: string;
+  }) {
+    return this.request<{ ok: boolean }>('POST', '/schedules', body);
+  }
+
+  deleteSchedule(id: string) {
+    return this.request<{ ok: boolean }>('DELETE', `/schedules/${id}`);
+  }
+
+  // Upstreams -----------------------------------------------------------------
   listUpstreams() {
     return this.request<{ upstreams: Upstream[] }>('GET', '/upstreams');
   }

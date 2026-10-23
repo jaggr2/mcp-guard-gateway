@@ -55,8 +55,83 @@ export interface ClientRow {
   createdAt: string;
 }
 
+export interface SandboxUsage {
+  costTodayUsd: number;
+  costMonthUsd: number;
+  tokensHour: number;
+  tokensToday: number;
+  opencodeGoTokensToday: number;
+  requestsToday: number;
+}
+
+export interface SandboxEntry {
+  slug: string;
+  displayName: string;
+  repoUrl: string;
+  url: string;
+  template: 'import' | 'fullstack' | 'cdk' | 'minimal';
+  lifecycleMode: 'auto-stop' | 'always-on';
+  idleTimeoutMinutes: number;
+  dailyBudgetUsd: number;
+  monthlyBudgetUsd: number;
+  hourlyTokenCap: number;
+  dailyTokenCap: number;
+  awsRoleArn: string | null;
+  awsDeployRoleArn: string | null;
+  allowedUpstreams: string;
+  status: string;
+  branch: string;
+  dirtyFiles: number;
+  lastActiveAt: string | null;
+  usage: SandboxUsage;
+}
+
+export interface LearningEntry {
+  id: number;
+  ts: string;
+  sourceProject: string;
+  kind: 'gotcha' | 'memory' | 'skill';
+  targetPath: string;
+  title: string;
+  content: string;
+  mode: 'append' | 'replace';
+  rationale: string | null;
+  status: string;
+  commitRef: string | null;
+}
+
+export interface ScheduleEntry {
+  id: string;
+  name: string;
+  cronExpr: string;
+  project: string;
+  model: string;
+  prompt: string;
+  allowedUpstreams: string;
+  deliveryTarget: string;
+  enabled: boolean;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastOutput: string | null;
+  createdAt: string;
+}
+
 export interface StatusInfo {
   publicUrl: string;
   issuers: string[];
   upstreams: { namespace: string; displayName: string; enabled: boolean; trust: string }[];
+  sandboxes?: {
+    slug: string;
+    displayName: string;
+    status: string;
+    lifecycleMode: string;
+    costTodayUsd: number;
+    dailyBudgetUsd: number;
+  }[];
+  globalUsage?: {
+    costTodayUsd: number;
+    costMonthUsd: number;
+    opencodeGoTokensToday: number;
+    mcpCallsToday: number;
+  };
 }

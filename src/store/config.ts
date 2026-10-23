@@ -3,6 +3,8 @@ import type Database from "better-sqlite3";
 export type Guard = "none" | "reason" | "hitl";
 export type DriftAction = "log" | "notify" | "block";
 export type TrustState = "ok" | "drift" | "error";
+export type LifecycleMode = "auto-stop" | "always-on";
+export type ProjectTemplate = "import" | "fullstack" | "cdk" | "minimal";
 
 export interface UpstreamRow {
   id: string;
@@ -44,6 +46,83 @@ export interface ClientRow {
   createdAt: string;
 }
 
+export interface ProjectRow {
+  slug: string;
+  displayName: string;
+  repoUrl: string;
+  template: ProjectTemplate;
+  lifecycleMode: LifecycleMode;
+  idleTimeoutMinutes: number;
+  dailyBudgetUsd: number;
+  monthlyBudgetUsd: number;
+  hourlyTokenCap: number;
+  dailyTokenCap: number;
+  awsRoleArn: string | null;
+  awsDeployRoleArn: string | null;
+  allowedUpstreams: string;
+  tokenHash: string | null;
+  status: string;
+  branch: string;
+  dirtyFiles: number;
+  lastActiveAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LlmUsageRecord {
+  project: string;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  costUsd: number;
+  latencyMs: number;
+  status: string;
+  error?: string | null;
+}
+
+export interface ProjectUsageSummary {
+  project: string;
+  costTodayUsd: number;
+  costMonthUsd: number;
+  tokensHour: number;
+  tokensToday: number;
+  opencodeGoTokensToday: number;
+  requestsToday: number;
+}
+
+export interface LearningRow {
+  id: number;
+  ts: string;
+  sourceProject: string;
+  kind: "gotcha" | "memory" | "skill";
+  targetPath: string;
+  title: string;
+  content: string;
+  mode: "append" | "replace";
+  rationale: string | null;
+  status: string;
+  commitRef: string | null;
+}
+
+export interface ScheduleRow {
+  id: string;
+  name: string;
+  cronExpr: string;
+  project: string;
+  model: string;
+  prompt: string;
+  allowedUpstreams: string;
+  deliveryTarget: string;
+  enabled: boolean;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastOutput: string | null;
+  createdAt: string;
+}
+
 const nowIso = () => new Date().toISOString();
 
 function parseHeaderMap(json: string | null): Record<string, string> {
@@ -52,6 +131,31 @@ function parseHeaderMap(json: string | null): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function mapProjectRow(r: Record<string, unknown>): ProjectRow {
+  return {
+    slug: String(r.slug),
+    displayName: String(r.display_name),
+    repoUrl: String(r.repo_url),
+    template: (r.template as ProjectTemplate) ?? "import",
+    lifecycleMode: (r.lifecycle_mode as LifecycleMode) ?? "auto-stop",
+    idleTimeoutMinutes: Number(r.idle_timeout_minutes ?? 120),
+    dailyBudgetUsd: Number(r.daily_budget_usd ?? 5.0),
+    monthlyBudgetUsd: Number(r.monthly_budget_usd ?? 30.0),
+    hourlyTokenCap: Number(r.hourly_token_cap ?? 500000),
+    dailyTokenCap: Number(r.daily_token_cap ?? 2500000),
+    awsRoleArn: r.aws_role_arn == null ? null : String(r.aws_role_arn),
+    awsDeployRoleArn: r.aws_deploy_role_arn == null ? null : String(r.aws_deploy_role_arn),
+    allowedUpstreams: String(r.allowed_upstreams ?? "*"),
+    tokenHash: r.token_hash == null ? null : String(r.token_hash),
+    status: String(r.status ?? "stopped"),
+    branch: String(r.branch ?? "main"),
+    dirtyFiles: Number(r.dirty_files ?? 0),
+    lastActiveAt: r.last_active_at == null ? null : String(r.last_active_at),
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+  };
 }
 
 /** Configuration/state repository over SQLite (admin API surface). */
@@ -298,6 +402,13 @@ export class ConfigStore {
     return row?.value_ciphertext ?? null;
   }
 
+  listSecretCiphertexts(): string[] {
+    const rows = this.db.prepare("SELECT value_ciphertext FROM secrets").all() as {
+      value_ciphertext: string;
+    }[];
+    return rows.map((r) => r.value_ciphertext);
+  }
+
   setSecret(name: string, ciphertext: string): void {
     this.db
       .prepare(
@@ -309,5 +420,272 @@ export class ConfigStore {
 
   deleteSecret(name: string): void {
     this.db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
+  }
+
+  // projects (OpenCode sandboxes) ---------------------------------------------
+  listProjects(): ProjectRow[] {
+    const rows = this.db.prepare("SELECT * FROM projects ORDER BY slug").all() as Record<
+      string,
+      unknown
+    >[];
+    return rows.map(mapProjectRow);
+  }
+
+  getProject(slug: string): ProjectRow | undefined {
+    const row = this.db.prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? mapProjectRow(row) : undefined;
+  }
+
+  getProjectByTokenHash(tokenHash: string): ProjectRow | undefined {
+    const row = this.db.prepare("SELECT * FROM projects WHERE token_hash = ?").get(tokenHash) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? mapProjectRow(row) : undefined;
+  }
+
+  upsertProject(p: Omit<ProjectRow, "createdAt" | "updatedAt">): void {
+    const ts = nowIso();
+    this.db
+      .prepare(
+        `INSERT INTO projects (
+           slug, display_name, repo_url, template, lifecycle_mode, idle_timeout_minutes,
+           daily_budget_usd, monthly_budget_usd, hourly_token_cap, daily_token_cap,
+           aws_role_arn, aws_deploy_role_arn, allowed_upstreams, token_hash,
+           status, branch, dirty_files, last_active_at, created_at, updated_at
+         ) VALUES (
+           @slug, @displayName, @repoUrl, @template, @lifecycleMode, @idleTimeoutMinutes,
+           @dailyBudgetUsd, @monthlyBudgetUsd, @hourlyTokenCap, @dailyTokenCap,
+           @awsRoleArn, @awsDeployRoleArn, @allowedUpstreams, @tokenHash,
+           @status, @branch, @dirtyFiles, @lastActiveAt, @ts, @ts
+         )
+         ON CONFLICT(slug) DO UPDATE SET
+           display_name = @displayName,
+           repo_url = @repoUrl,
+           template = @template,
+           lifecycle_mode = @lifecycleMode,
+           idle_timeout_minutes = @idleTimeoutMinutes,
+           daily_budget_usd = @dailyBudgetUsd,
+           monthly_budget_usd = @monthlyBudgetUsd,
+           hourly_token_cap = @hourlyTokenCap,
+           daily_token_cap = @dailyTokenCap,
+           aws_role_arn = @awsRoleArn,
+           aws_deploy_role_arn = @awsDeployRoleArn,
+           allowed_upstreams = @allowedUpstreams,
+           token_hash = COALESCE(@tokenHash, projects.token_hash),
+           status = @status,
+           branch = @branch,
+           dirty_files = @dirtyFiles,
+           last_active_at = COALESCE(@lastActiveAt, projects.last_active_at),
+           updated_at = @ts`
+      )
+      .run({
+        ...p,
+        ts,
+      });
+  }
+
+  touchProjectActivity(slug: string, status?: string): void {
+    const ts = nowIso();
+    if (status) {
+      this.db
+        .prepare("UPDATE projects SET last_active_at = ?, status = ?, updated_at = ? WHERE slug = ?")
+        .run(ts, status, ts, slug);
+    } else {
+      this.db
+        .prepare("UPDATE projects SET last_active_at = ?, updated_at = ? WHERE slug = ?")
+        .run(ts, ts, slug);
+    }
+  }
+
+  deleteProject(slug: string): void {
+    this.db.prepare("DELETE FROM projects WHERE slug = ?").run(slug);
+  }
+
+  // LLM usage & cost ledger ---------------------------------------------------
+  recordLlmUsage(rec: LlmUsageRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO llm_usage (
+           ts, project, provider, model, input_tokens, output_tokens,
+           cached_tokens, reasoning_tokens, cost_usd, latency_ms, status, error
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        nowIso(),
+        rec.project,
+        rec.provider,
+        rec.model,
+        rec.inputTokens,
+        rec.outputTokens,
+        rec.cachedTokens ?? 0,
+        rec.reasoningTokens ?? 0,
+        rec.costUsd,
+        rec.latencyMs,
+        rec.status,
+        rec.error ?? null
+      );
+  }
+
+  getProjectUsageSummary(project: string, now = new Date()): ProjectUsageSummary {
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const hourStart = new Date(now.getTime() - 3600_000).toISOString();
+
+    const todayRow = this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(cost_usd), 0) AS cost_today,
+           COALESCE(SUM(input_tokens + output_tokens + reasoning_tokens), 0) AS tokens_today,
+           COALESCE(SUM(CASE WHEN provider = 'opencode-go' THEN input_tokens + output_tokens + reasoning_tokens ELSE 0 END), 0) AS oc_tokens_today,
+           COUNT(*) AS reqs_today
+         FROM llm_usage WHERE project = ? AND ts >= ?`
+      )
+      .get(project, dayStart) as Record<string, unknown>;
+
+    const monthRow = this.db
+      .prepare("SELECT COALESCE(SUM(cost_usd), 0) AS cost_month FROM llm_usage WHERE project = ? AND ts >= ?")
+      .get(project, monthStart) as Record<string, unknown>;
+
+    const hourRow = this.db
+      .prepare(
+        "SELECT COALESCE(SUM(input_tokens + output_tokens + reasoning_tokens), 0) AS tokens_hour FROM llm_usage WHERE project = ? AND ts >= ?"
+      )
+      .get(project, hourStart) as Record<string, unknown>;
+
+    return {
+      project,
+      costTodayUsd: Number(todayRow?.cost_today ?? 0),
+      costMonthUsd: Number(monthRow?.cost_month ?? 0),
+      tokensHour: Number(hourRow?.tokens_hour ?? 0),
+      tokensToday: Number(todayRow?.tokens_today ?? 0),
+      opencodeGoTokensToday: Number(todayRow?.oc_tokens_today ?? 0),
+      requestsToday: Number(todayRow?.reqs_today ?? 0),
+    };
+  }
+
+  getGlobalUsageSummary(now = new Date()): {
+    costTodayUsd: number;
+    costMonthUsd: number;
+    opencodeGoTokensToday: number;
+    mcpCallsToday: number;
+  } {
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+
+    const todayRow = this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(cost_usd), 0) AS cost_today,
+           COALESCE(SUM(CASE WHEN provider = 'opencode-go' THEN input_tokens + output_tokens + reasoning_tokens ELSE 0 END), 0) AS oc_tokens_today
+         FROM llm_usage WHERE ts >= ?`
+      )
+      .get(dayStart) as Record<string, unknown>;
+
+    const monthRow = this.db
+      .prepare("SELECT COALESCE(SUM(cost_usd), 0) AS cost_month FROM llm_usage WHERE ts >= ?")
+      .get(monthStart) as Record<string, unknown>;
+
+    const mcpRow = this.db
+      .prepare("SELECT COUNT(*) AS mcp_calls FROM audit WHERE ts >= ?")
+      .get(dayStart) as Record<string, unknown>;
+
+    return {
+      costTodayUsd: Number(todayRow?.cost_today ?? 0),
+      costMonthUsd: Number(monthRow?.cost_month ?? 0),
+      opencodeGoTokensToday: Number(todayRow?.oc_tokens_today ?? 0),
+      mcpCallsToday: Number(mcpRow?.mcp_calls ?? 0),
+    };
+  }
+
+  // central learnings (jaggr2/agent-memory) -----------------------------------
+  listLearnings(limit = 50): LearningRow[] {
+    const rows = this.db
+      .prepare("SELECT * FROM learnings ORDER BY id DESC LIMIT ?")
+      .all(limit) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: Number(r.id),
+      ts: String(r.ts),
+      sourceProject: String(r.source_project),
+      kind: (r.kind as "gotcha" | "memory" | "skill") ?? "gotcha",
+      targetPath: String(r.target_path),
+      title: String(r.title),
+      content: String(r.content),
+      mode: (r.mode as "append" | "replace") ?? "append",
+      rationale: r.rationale == null ? null : String(r.rationale),
+      status: String(r.status),
+      commitRef: r.commit_ref == null ? null : String(r.commit_ref),
+    }));
+  }
+
+  insertLearning(l: Omit<LearningRow, "id" | "ts">): LearningRow {
+    const ts = nowIso();
+    const info = this.db
+      .prepare(
+        `INSERT INTO learnings (ts, source_project, kind, target_path, title, content, mode, rationale, status, commit_ref)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(ts, l.sourceProject, l.kind, l.targetPath, l.title, l.content, l.mode, l.rationale, l.status, l.commitRef);
+    return { id: Number(info.lastInsertRowid), ts, ...l };
+  }
+
+  // schedules (Warden Cron) ---------------------------------------------------
+  listSchedules(): ScheduleRow[] {
+    const rows = this.db.prepare("SELECT * FROM schedules ORDER BY name").all() as Record<
+      string,
+      unknown
+    >[];
+    return rows.map((r) => ({
+      id: String(r.id),
+      name: String(r.name),
+      cronExpr: String(r.cron_expr),
+      project: String(r.project),
+      model: String(r.model),
+      prompt: String(r.prompt),
+      allowedUpstreams: String(r.allowed_upstreams),
+      deliveryTarget: String(r.delivery_target),
+      enabled: Number(r.enabled) === 1,
+      lastRunAt: r.last_run_at == null ? null : String(r.last_run_at),
+      lastStatus: r.last_status == null ? null : String(r.last_status),
+      lastOutput: r.last_output == null ? null : String(r.last_output),
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  upsertSchedule(s: Omit<ScheduleRow, "createdAt" | "lastRunAt" | "lastStatus" | "lastOutput"> & {
+    lastRunAt?: string | null;
+    lastStatus?: string | null;
+    lastOutput?: string | null;
+  }): void {
+    const ts = nowIso();
+    this.db
+      .prepare(
+        `INSERT INTO schedules (id, name, cron_expr, project, model, prompt, allowed_upstreams, delivery_target, enabled, last_run_at, last_status, last_output, created_at)
+         VALUES (@id, @name, @cronExpr, @project, @model, @prompt, @allowedUpstreams, @deliveryTarget, @enabled, @lastRunAt, @lastStatus, @lastOutput, @ts)
+         ON CONFLICT(name) DO UPDATE SET
+           cron_expr = @cronExpr,
+           project = @project,
+           model = @model,
+           prompt = @prompt,
+           allowed_upstreams = @allowedUpstreams,
+           delivery_target = @deliveryTarget,
+           enabled = @enabled,
+           last_run_at = COALESCE(@lastRunAt, schedules.last_run_at),
+           last_status = COALESCE(@lastStatus, schedules.last_status),
+           last_output = COALESCE(@lastOutput, schedules.last_output)`
+      )
+      .run({
+        ...s,
+        enabled: s.enabled ? 1 : 0,
+        lastRunAt: s.lastRunAt ?? null,
+        lastStatus: s.lastStatus ?? null,
+        lastOutput: s.lastOutput ?? null,
+        ts,
+      });
+  }
+
+  deleteSchedule(id: string): void {
+    this.db.prepare("DELETE FROM schedules WHERE id = ? OR name = ?").run(id, id);
   }
 }
