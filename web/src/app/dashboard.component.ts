@@ -45,7 +45,7 @@ import type { StatusInfo } from './models';
                 <td>{{ s.status }}</td>
                 <td>{{ s.lifecycleMode }}</td>
                 <td>\${{ s.costTodayUsd.toFixed(3) }} / \${{ s.dailyBudgetUsd.toFixed(2) }}</td>
-                <td><a [href]="'https://' + s.slug + '.oc.jaggi.xyz'" target="_blank" rel="noopener">Open Web IDE ↗</a></td>
+                <td><a [href]="'https://oc.jaggi.xyz/s/' + s.slug" target="_blank" rel="noopener">Open Web IDE ↗</a></td>
               </tr>
             }
           </tbody>

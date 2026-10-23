@@ -18,8 +18,10 @@ import { SecretBox } from "./secrets";
 import { handleLlmProxy } from "./llm/proxy";
 import { handleAwsCredsBroker, handleGitCredsBroker } from "./brokers/credentials";
 import {
+  extractSandboxCookie,
   extractSandboxSlugFromHost,
   handleSandboxReverseProxy,
+  renderSandboxPickerHtml,
   sweepIdleSandboxes,
 } from "./sandboxes/proxy";
 
@@ -53,15 +55,41 @@ export function createApp(env: Record<string, string | undefined>): Hono {
 
   startBackgroundTasks(config, db, notifier);
 
-  // Wake-on-visit reverse proxy when Host is `<project>.oc.jaggi.xyz` ----------
+  // Wake-on-visit reverse proxy (`oc.jaggi.xyz/s/<slug>`, `oc-<slug>.jaggi.xyz`, `<slug>.oc.jaggi.xyz`)
   app.use("*", async (c, next) => {
-    const slug = extractSandboxSlugFromHost(c.req.header("host"));
-    if (slug) {
-      return handleSandboxReverseProxy(c.req.raw, slug, configStore, config.sandboxCtlScript);
+    const host = c.req.header("host")?.split(":")[0].trim().toLowerCase() ?? "";
+
+    // 1. Direct `/s/<slug>` switcher route (works on oc.jaggi.xyz, derog-opencode.jaggi.xyz, or warden.jaggi.xyz)
+    const switchMatch = /^\/s\/([a-z0-9][a-z0-9-]{0,48}[a-z0-9])\/?$/.exec(c.req.path);
+    if (switchMatch) {
+      const targetSlug = switchMatch[1];
+      if (!configStore.getProject(targetSlug)) {
+        return c.text(`Sandbox '${targetSlug}' not found`, 404);
+      }
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: "/",
+          "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
+        },
+      });
     }
-    if (c.req.header("host")?.split(":")[0].toLowerCase() === "oc.jaggi.xyz" && c.req.path === "/") {
-      return c.redirect(`${config.publicUrl}/sandboxes`, 302);
+
+    // 2. Subdomain routing (`oc-<slug>.jaggi.xyz` or `<slug>.oc.jaggi.xyz`)
+    const hostSlug = extractSandboxSlugFromHost(host);
+    if (hostSlug) {
+      return handleSandboxReverseProxy(c.req.raw, hostSlug, configStore, config.sandboxCtlScript);
     }
+
+    // 3. Single-hostname routing on `oc.jaggi.xyz` or `derog-opencode.jaggi.xyz`
+    if (host === "oc.jaggi.xyz" || host === "derog-opencode.jaggi.xyz") {
+      const cookieSlug = extractSandboxCookie(c.req.header("cookie"));
+      if (c.req.path === "/picker" || !cookieSlug) {
+        return c.html(renderSandboxPickerHtml(configStore.listProjects(), cookieSlug));
+      }
+      return handleSandboxReverseProxy(c.req.raw, cookieSlug, configStore, config.sandboxCtlScript);
+    }
+
     await next();
   });
 

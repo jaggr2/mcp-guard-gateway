@@ -161,12 +161,19 @@ describe("Warden App Routes (/llm, /aws-creds, /git-creds, *.oc.jaggi.xyz, /api/
     const provBody = (await provRes.json()) as { sandboxToken: string };
     expect(provBody.sandboxToken).toMatch(/^oc_test-proj_/);
 
-    // 2. Wake-on-visit splash screen when visiting https://test-proj.oc.jaggi.xyz
-    const wakeRes = await app.request("http://test-proj.oc.jaggi.xyz/", {
-      headers: { Host: "test-proj.oc.jaggi.xyz" },
+    // 2. Single-hostname `/s/<slug>` sets warden_sandbox cookie and redirects to `/`
+    const switchRes = await app.request("https://oc.jaggi.xyz/s/test-proj", {
+      headers: { Host: "oc.jaggi.xyz" },
     });
-    expect(wakeRes.status).toBe(200);
-    const wakeHtml = await wakeRes.text();
+    expect(switchRes.status).toBe(302);
+    expect(switchRes.headers.get("set-cookie")).toContain("warden_sandbox=test-proj");
+
+    // 2b. Visiting `oc.jaggi.xyz/` with `warden_sandbox=test-proj` cookie wakes/proxies `test-proj`
+    const cookieWakeRes = await app.request("https://oc.jaggi.xyz/", {
+      headers: { Host: "oc.jaggi.xyz", Cookie: "warden_sandbox=test-proj" },
+    });
+    expect(cookieWakeRes.status).toBe(200);
+    const wakeHtml = await cookieWakeRes.text();
     expect(wakeHtml).toContain("Waking up <code>test-proj</code> sandbox");
 
     // 3. AWS CDK Deploy mode requires HITL approval

@@ -73,7 +73,7 @@ export function registerApi(
         branch: p.branch,
         dirty_files: p.dirtyFiles,
         lifecycle: p.lifecycleMode,
-        url: `https://${p.slug}.oc.jaggi.xyz`,
+        url: `https://oc.jaggi.xyz/s/${p.slug}`,
         repo_url: p.repoUrl,
         cost_today: u.costTodayUsd,
         cost_month: u.costMonthUsd,
@@ -186,7 +186,7 @@ export function registerApi(
         slug: p.slug,
         displayName: p.displayName,
         repoUrl: p.repoUrl,
-        url: `https://${p.slug}.oc.jaggi.xyz`,
+        url: `https://oc.jaggi.xyz/s/${p.slug}`,
         template: p.template,
         lifecycleMode: p.lifecycleMode,
         idleTimeoutMinutes: p.idleTimeoutMinutes,
@@ -257,11 +257,11 @@ export function registerApi(
       rawToken,
     ]);
 
-    void notifier.notify(`🚀 Provisioned OpenCode sandbox '${slug}' (https://${slug}.oc.jaggi.xyz)`);
+    void notifier.notify(`🚀 Provisioned OpenCode sandbox '${slug}' (https://oc.jaggi.xyz/s/${slug})`);
     return c.json({
       ok: true,
       slug,
-      url: `https://${slug}.oc.jaggi.xyz`,
+      url: `https://oc.jaggi.xyz/s/${slug}`,
       repoUrl: `https://github.com/jaggr2/${slug}`,
       sandboxToken: rawToken,
     });
