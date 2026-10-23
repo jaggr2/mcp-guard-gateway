@@ -18,10 +18,25 @@ import type { ConfigStore, ProjectRow } from "../store/config";
  */
 
 const PROVIDER_UPSTREAMS: Record<string, { baseUrl: string; secretName: string; envFallback: string }> = {
-  "opencode-go": {
-    baseUrl: "https://opencode.ai/zen",
+  warden: {
+    baseUrl: "https://opencode.ai/inference/go/openai",
     secretName: "OPENCODE_GO_API_KEY",
     envFallback: "OPENCODE_GO_API_KEY",
+  },
+  "opencode-go": {
+    baseUrl: "https://opencode.ai/inference/go/openai",
+    secretName: "OPENCODE_GO_API_KEY",
+    envFallback: "OPENCODE_GO_API_KEY",
+  },
+  deepseek: {
+    baseUrl: "https://api.deepseek.com",
+    secretName: "DEEPSEEK_API_KEY",
+    envFallback: "DEEPSEEK_API_KEY",
+  },
+  bitdeer: {
+    baseUrl: "https://api-inference.bitdeer.ai",
+    secretName: "BITDEER_API_KEY",
+    envFallback: "BITDEER_API_KEY",
   },
   openai: {
     baseUrl: "https://api.openai.com",
@@ -170,8 +185,17 @@ export async function handleLlmProxy(
     }
   }
 
-  const upstreamBase = configStore.getSetting(`llm.${provider}.baseUrl`) ?? providerSpec.baseUrl;
-  const targetUrl = `${upstreamBase.replace(/\/$/, "")}/${subpath.replace(/^\//, "")}`;
+  let upstreamBase = configStore.getSetting(`llm.${provider}.baseUrl`) ?? providerSpec.baseUrl;
+  let cleanSubpath = subpath.replace(/^\//, "");
+  if (provider === "opencode-go" || provider === "warden") {
+    if (parsedModel.startsWith("gemini")) {
+      upstreamBase = "https://opencode.ai/inference/go/google/v1beta";
+      cleanSubpath = cleanSubpath.replace(/^v1\//, "");
+    } else if (parsedModel.startsWith("claude")) {
+      upstreamBase = "https://opencode.ai/inference/go/anthropic";
+    }
+  }
+  const targetUrl = `${upstreamBase.replace(/\/$/, "")}/${cleanSubpath}`;
 
   const headers = new Headers();
   headers.set("Content-Type", request.headers.get("Content-Type") ?? "application/json");

@@ -292,7 +292,7 @@ export async function handleSandboxReverseProxy(
 
   try {
     const forwardHeaders = new Headers(request.headers);
-    forwardHeaders.delete("accept-encoding"); // ensure plain text/html so we can inject `/__warden-init.js`
+    forwardHeaders.set("accept-encoding", "identity");
 
     const res = await fetch(targetUrl, {
       method: request.method,
@@ -305,6 +305,12 @@ export async function handleSandboxReverseProxy(
 
     void ensureSandboxProjectInitialized(upstreamOrigin, project);
 
+    // Always strip content-encoding and content-length because Node's fetch (undici)
+    // transparently decompresses gzip/br response streams while leaving the original headers intact.
+    const outHeaders = new Headers(res.headers);
+    outHeaders.delete("content-length");
+    outHeaders.delete("content-encoding");
+
     const contentType = res.headers.get("content-type") ?? "";
     if (request.method === "GET" && contentType.includes("text/html")) {
       const html = await res.text();
@@ -312,13 +318,10 @@ export async function handleSandboxReverseProxy(
         "<script type=\"module\"",
         `<script src="/__warden-init.js"></script><script type="module"`
       );
-      const outHeaders = new Headers(res.headers);
-      outHeaders.delete("content-length");
-      outHeaders.delete("content-encoding");
       return new Response(injected, { status: res.status, headers: outHeaders });
     }
 
-    return res;
+    return new Response(res.body, { status: res.status, headers: outHeaders });
   } catch {
     clearTimeout(connectTimer);
     initializedProjects.delete(slug);
