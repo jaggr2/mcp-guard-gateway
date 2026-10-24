@@ -157,7 +157,7 @@ async function runApproved(deps: Deps, row: ApprovalRow): Promise<CallToolResult
     if (!client) {
       throw new Error("upstream unavailable");
     }
-    result = await client.callTool(upstreamName(deps, row.tool), JSON.parse(row.args));
+    result = await client.callTool(upstreamName(deps, row.tool), JSON.parse(row.args), deps.callerId);
   } catch (err) {
     result = errorResult(
       `Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`

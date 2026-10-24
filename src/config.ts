@@ -20,6 +20,8 @@ export interface GatewayConfig {
   agentMemoryDir: string | null;
   /** Host path to `sandbox-ctl.py` orchestrator script. */
   sandboxCtlScript: string;
+  /** Browser Broker orchestrator base URL (`/api/browser/*` proxy target). */
+  browserOrchestratorUrl: string;
   /** Trusted OIDC issuers for MCP Bearer auth (issuer -> {jwks, audience}). */
   issuers: IssuerConfig[];
   /** Authelia forward-auth identity headers set by the reverse proxy. */
@@ -69,6 +71,7 @@ const DEFAULTS = {
   HERMES_BRIDGE_URL: "http://127.0.0.1:8643",
   HASS_NOTIFY_SERVICE: "notify",
   SANDBOX_CTL_SCRIPT: "/opt/homelab/x64-rack-server/scripts/sandbox-ctl.py",
+  BROWSER_ORCHESTRATOR_URL: "http://browser-host:8940",
   CALLER_ID_HEADER: "Remote-Email",
   GROUPS_HEADER: "Remote-Groups",
   ADMIN_GROUPS: "admins",
@@ -110,6 +113,7 @@ export function loadConfig(env: Record<string, string | undefined>, protocolVers
     hassNotifyService: env.HASS_NOTIFY_SERVICE ?? DEFAULTS.HASS_NOTIFY_SERVICE,
     agentMemoryDir: env.AGENT_MEMORY_DIR ?? null,
     sandboxCtlScript: env.SANDBOX_CTL_SCRIPT ?? DEFAULTS.SANDBOX_CTL_SCRIPT,
+    browserOrchestratorUrl: (env.ORCHESTRATOR_URL ?? DEFAULTS.BROWSER_ORCHESTRATOR_URL).replace(/\/$/, ""),
     issuers,
     identityHeader: env.CALLER_ID_HEADER ?? DEFAULTS.CALLER_ID_HEADER,
     groupsHeader: env.GROUPS_HEADER ?? DEFAULTS.GROUPS_HEADER,

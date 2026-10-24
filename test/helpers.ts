@@ -56,6 +56,7 @@ export function testConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     hassNotifyService: "notify",
     agentMemoryDir: null,
     sandboxCtlScript: "/opt/homelab/x64-rack-server/scripts/sandbox-ctl.py",
+    browserOrchestratorUrl: "http://browser-host:8940",
     issuers: [],
     identityHeader: "Remote-Email",
     groupsHeader: "Remote-Groups",

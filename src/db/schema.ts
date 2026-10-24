@@ -4,6 +4,8 @@
  * Applied idempotently at startup (and to in-memory DBs in tests).
  */
 
+import type Database from "better-sqlite3";
+
 export const SCHEMA = `
 -- operational ------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit (
@@ -107,6 +109,8 @@ CREATE TABLE IF NOT EXISTS projects (
   aws_role_arn         TEXT,
   aws_deploy_role_arn  TEXT,
   allowed_upstreams    TEXT NOT NULL DEFAULT '*',          -- CSV of allowed MCP namespaces or '*'
+  browser_allowed_domains TEXT NOT NULL DEFAULT '',        -- Browser Broker: CSV of allowed nav domains ('*' = any)
+  browser_internal_targets TEXT NOT NULL DEFAULT '',       -- Browser Broker: CSV of private hosts nav may still reach
   token_hash           TEXT,                               -- sha256 of SANDBOX_TOKEN
   status               TEXT NOT NULL DEFAULT 'stopped',    -- running | stopped | provisioning
   branch               TEXT NOT NULL DEFAULT 'main',
@@ -168,3 +172,30 @@ CREATE TABLE IF NOT EXISTS schedules (
   created_at        TEXT NOT NULL
 );
 `;
+
+/**
+ * Additive column migrations for DBs created before the column existed
+ * (`CREATE TABLE IF NOT EXISTS` never adds columns to an existing table).
+ * Applied idempotently at startup — guarded by `PRAGMA table_info`.
+ */
+const COLUMN_MIGRATIONS: { table: string; column: string; ddl: string }[] = [
+  {
+    table: "projects",
+    column: "browser_allowed_domains",
+    ddl: "ALTER TABLE projects ADD COLUMN browser_allowed_domains TEXT NOT NULL DEFAULT ''",
+  },
+  {
+    table: "projects",
+    column: "browser_internal_targets",
+    ddl: "ALTER TABLE projects ADD COLUMN browser_internal_targets TEXT NOT NULL DEFAULT ''",
+  },
+];
+
+export function migrate(db: Database.Database): void {
+  for (const { table, column, ddl } of COLUMN_MIGRATIONS) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === column)) {
+      db.exec(ddl);
+    }
+  }
+}

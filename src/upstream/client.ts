@@ -35,7 +35,7 @@ export interface UpstreamClient {
   readonly displayName: string;
   readonly url: string;
   toolsList(cursor?: string): Promise<UpstreamToolsResponse>;
-  callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult>;
+  callTool(name: string, args: Record<string, unknown>, caller?: string): Promise<CallToolResult>;
   initialize(): Promise<InitializeResult>;
   snapshot(): Promise<{ serverInfo?: InitializeResult["serverInfo"]; instructions?: string; tools: UpstreamTool[] }>;
 }
@@ -88,7 +88,7 @@ export class UpstreamClientImpl implements UpstreamClient {
     return this.config.url;
   }
 
-  private headers(): Record<string, string> {
+  private headers(caller?: string): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
@@ -96,6 +96,9 @@ export class UpstreamClientImpl implements UpstreamClient {
     const protocolVersion = this.config.protocolVersion;
     if (protocolVersion) {
       headers["MCP-Protocol-Version"] = protocolVersion;
+    }
+    if (typeof caller === "string" && caller.length > 0) {
+      headers["X-Warden-Caller"] = caller;
     }
     for (const [name, value] of Object.entries(this.config.headers)) {
       if (name.toLowerCase() !== "authorization" || !headers.Authorization) {
@@ -105,11 +108,11 @@ export class UpstreamClientImpl implements UpstreamClient {
     return headers;
   }
 
-  private async request(method: string, params?: unknown): Promise<unknown> {
+  private async request(method: string, params?: unknown, caller?: string): Promise<unknown> {
     const body = JSON.stringify({ jsonrpc: "2.0", id: nextId(), method, params });
     let response: Response;
     try {
-      response = await fetch(this.config.url, { method: "POST", headers: this.headers(), body });
+      response = await fetch(this.config.url, { method: "POST", headers: this.headers(caller), body });
     } catch (err) {
       throw new McpError(
         ErrorCode.InternalError,
@@ -143,8 +146,8 @@ export class UpstreamClientImpl implements UpstreamClient {
     return { tools: tools as UpstreamTool[], nextCursor };
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
-    const result = await this.request("tools/call", { name, arguments: args });
+  async callTool(name: string, args: Record<string, unknown>, caller?: string): Promise<CallToolResult> {
+    const result = await this.request("tools/call", { name, arguments: args }, caller);
     if (isObject(result)) {
       return result as unknown as CallToolResult;
     }

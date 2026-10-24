@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { SCHEMA } from "./schema";
+import { migrate, SCHEMA } from "./schema";
 
 /**
  * Opens the gateway database (file or `:memory:`) and applies the schema
@@ -12,5 +12,6 @@ export function openDatabase(path: string): Database.Database {
   db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }

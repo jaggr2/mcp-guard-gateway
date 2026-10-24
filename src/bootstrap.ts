@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { GatewayConfig } from "./config";
-import { ConfigStore } from "./store/config";
+import { ConfigStore, type PolicyRow } from "./store/config";
 import { SecretBox } from "./secrets";
 
 /**
@@ -36,6 +36,11 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
     );
   }
 
+  // Browser Broker upstreams (browser-host orchestrator facade) — always attempted,
+  // seedUpstream() skips namespaces that already exist.
+  seedUpstream(configStore, "playwright", "Playwright Browser", "http://browser-host:8940/mcp", "block", {});
+  seedUpstream(configStore, "devtools", "Chrome DevTools", "http://browser-host:8940/devtools", "block", {});
+
   for (const [name, value] of Object.entries(config.seedSecrets)) {
     if (configStore.getSecret(name) === null) {
       configStore.setSecret(name, secrets.encrypt(value));
@@ -57,6 +62,10 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
     }
   }
 
+  // Browser Broker policies must exist on existing DBs too (the fresh-DB caveat in
+  // docs/BROWSER_BROKER.md Part 11.3) — ensureBrowserPolicies() never overwrites rows.
+  ensureBrowserPolicies(configStore);
+
   seedSetting(configStore, "hermes.bridgeUrl", config.hermesBridgeUrl);
   if (config.hermesConversationKey) {
     seedSetting(configStore, "hermes.conversationKey", config.hermesConversationKey);
@@ -73,7 +82,7 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
       repoUrl: "https://github.com/jaggr2/rsearch",
       template: "fullstack" as const,
       lifecycleMode: "auto-stop" as const,
-      allowedUpstreams: "github,aws,playwright",
+      allowedUpstreams: "github,aws,playwright,devtools",
     },
     {
       slug: "calendar-m365-google-sync",
@@ -81,7 +90,7 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
       repoUrl: "https://github.com/jaggr2/calendar-m365-google-sync",
       template: "cdk" as const,
       lifecycleMode: "auto-stop" as const,
-      allowedUpstreams: "github,aws,playwright",
+      allowedUpstreams: "github,aws,playwright,devtools",
     },
     {
       slug: "agent-memory",
@@ -161,5 +170,28 @@ function seedUpstream(
 function seedSetting(configStore: ConfigStore, key: string, value: string): void {
   if (value && configStore.getSetting(key) === null) {
     configStore.setSetting(key, value);
+  }
+}
+
+/**
+ * Seeds the Browser Broker policy rows on every boot — but only when no policy
+ * row exists yet for (upstream, tool), so operator changes made later in the UI
+ * are never overwritten. Tool names are the full namespaced names `resolvePolicy`
+ * matches on (see the `policies.tool` column comment).
+ */
+export function ensureBrowserPolicies(configStore: ConfigStore): void {
+  const rows: Omit<PolicyRow, "updatedAt">[] = [
+    { upstream: "playwright", tool: "*", enabled: true, guard: "reason", timeoutAction: null, ttlMinutes: null },
+    // arbitrary JS execution — enable per-project deliberately
+    { upstream: "playwright", tool: "playwright_browser_evaluate", enabled: false, guard: "none", timeoutAction: null, ttlMinutes: null },
+    { upstream: "playwright", tool: "playwright_browser_file_upload", enabled: true, guard: "hitl", timeoutAction: "deny", ttlMinutes: 60 },
+    { upstream: "playwright", tool: "playwright_browser_close", enabled: true, guard: "none", timeoutAction: null, ttlMinutes: null },
+    { upstream: "devtools", tool: "*", enabled: true, guard: "reason", timeoutAction: null, ttlMinutes: null },
+    { upstream: "devtools", tool: "devtools_evaluate_script", enabled: false, guard: "none", timeoutAction: null, ttlMinutes: null },
+  ];
+  for (const p of rows) {
+    if (!configStore.getUpstream(p.upstream)) continue; // upstream deleted — skip (policies FK upstreams)
+    if (configStore.getPolicy(p.upstream, p.tool)) continue;
+    configStore.upsertPolicy(p);
   }
 }

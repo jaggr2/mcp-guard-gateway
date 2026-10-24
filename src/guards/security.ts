@@ -5,9 +5,10 @@ import type { CallToolResult } from "../types";
  * MCP Security Fortress Guards:
  * 1. Per-project upstream ACLs (`allowed_upstreams`)
  * 2. Repo-boundary parameter guard (`owner == "jaggr2"`, `repo == project.slug`)
- * 3. Outbound secret & high-entropy token leak scanner
- * 4. Inbound prompt-injection & hidden Unicode tag sanitizer
- * 5. Per-project runaway tool-call loop circuit breaker
+ * 3. Browser-boundary parameter guard (Browser Broker URL scheme/private/domain policy)
+ * 4. Outbound secret & high-entropy token leak scanner
+ * 5. Inbound prompt-injection & hidden Unicode tag sanitizer
+ * 6. Per-project runaway tool-call loop circuit breaker
  */
 
 const SECRET_PATTERNS: { name: string; re: RegExp }[] = [
@@ -68,7 +69,136 @@ export function enforceRepoBoundary(
   return { ok: true };
 }
 
-/** 3. Scans outbound tool arguments (or learning payloads) for leaked secrets. */
+/** Splits a CSV config value into lowercased, trimmed, non-empty entries. */
+function splitCsv(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Matches the browser navigation tools the boundary applies to: namespaced
+ * `*_browser_navigate`, `*_browser_goto` and `*_devtools_navigate_page` calls
+ * (arg `url`), plus `*_browser_tabs` when it opens a tab (`action: "open"`).
+ */
+function matchBrowserNav(
+  toolName: string,
+  args: Record<string, unknown>
+): { matched: true; url: unknown } | { matched: false } {
+  const lower = toolName.toLowerCase();
+  if (
+    lower.endsWith("browser_navigate") ||
+    lower.endsWith("browser_goto") ||
+    lower.endsWith("devtools_navigate_page")
+  ) {
+    return { matched: true, url: args.url };
+  }
+  if (lower.endsWith("browser_tabs") && args.action === "open") {
+    return { matched: true, url: args.url };
+  }
+  return { matched: false };
+}
+
+/** Literal private/loopback/link-local IP check (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, ::1, fc00::/7, fe80::/10). */
+function isPrivateIpLiteral(host: string): boolean {
+  const bare = host.replace(/^\[|\]$/g, "");
+  const isV4 = (ip: string): boolean => {
+    const parts = ip.split(".").map((p) => Number(p));
+    if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+    const [a, b] = parts;
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254)
+    );
+  };
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(bare)) return isV4(bare);
+  if (!bare.includes(":")) return false;
+  const mappedV4 = bare.slice(bare.lastIndexOf(":") + 1); // ::ffff:127.0.0.1 style
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(mappedV4)) return isV4(mappedV4);
+  if (bare === "::1") return true;
+  const head = parseInt(bare.split(":")[0] || "0", 16);
+  return (head >= 0xfc00 && head <= 0xfdff) || (head >= 0xfe80 && head <= 0xfebf);
+}
+
+/** Private/loopback IP literals, `localhost`, and `*.internal` / `*.lan` hostnames. */
+function isPrivateHost(host: string): boolean {
+  const bare = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    bare === "localhost" ||
+    bare.endsWith(".localhost") ||
+    bare.endsWith(".internal") ||
+    bare.endsWith(".lan") ||
+    isPrivateIpLiteral(bare)
+  );
+}
+
+/** 3. Enforces the browser boundary (Browser Broker) on navigation tools: http/https
+ * only, no literal private/loopback/internal destinations (unless allowlisted in the
+ * project's `browserInternalTargets`), then the project's `browserAllowedDomains`
+ * policy (`*` = any domain, `''` = any non-private domain, else CSV of exact domains
+ * or `*.suffix` wildcards). Non-navigation tools pass through untouched. */
+export function enforceBrowserBoundary(
+  project: ProjectRow | undefined,
+  toolName: string,
+  args: Record<string, unknown>
+): { ok: true } | { ok: false; reason: string } {
+  const nav = matchBrowserNav(toolName, args);
+  if (!nav.matched) return { ok: true };
+
+  const who = project ? `Sandbox '${project.slug}'` : "Caller";
+  const raw = nav.url;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return {
+      ok: false,
+      reason: `[Warden Browser Guard] ${who} called '${toolName}' without a valid 'url' argument`,
+    };
+  }
+  const denyUrl = (detail: string): { ok: false; reason: string } => ({
+    ok: false,
+    reason: `[Warden Browser Guard] ${who} cannot navigate to '${raw}': ${detail}`,
+  });
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return denyUrl("not a valid absolute URL");
+  }
+
+  const scheme = parsed.protocol.toLowerCase();
+  if (scheme !== "http:" && scheme !== "https:") {
+    return denyUrl(`scheme '${scheme.replace(/:$/, "")}' is not allowed (only http and https)`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const hostPort = parsed.host.toLowerCase().replace(/^\[|\]$/g, "");
+  const isTarget = (entry: string): boolean =>
+    entry === hostname || entry === hostPort || entry === parsed.hostname.toLowerCase();
+
+  if (!splitCsv(project?.browserInternalTargets).some(isTarget) && isPrivateHost(hostname)) {
+    return denyUrl(
+      `'${hostname}' is a private/loopback destination — add it to browserInternalTargets to allow`
+    );
+  }
+
+  const policy = (project?.browserAllowedDomains ?? "").trim().toLowerCase();
+  if (policy === "*" || policy === "") return { ok: true }; // '' = any non-private destination
+  const domainOk = splitCsv(policy).some((entry) =>
+    entry.startsWith("*.") ? hostname.endsWith(entry.slice(1)) : isTarget(entry)
+  );
+  if (!domainOk) {
+    return denyUrl(
+      `domain '${hostname}' is not in browserAllowedDomains — add it (or a '*.suffix' wildcard) to allow`
+    );
+  }
+  return { ok: true };
+}
+
+/** 4. Scans outbound tool arguments (or learning payloads) for leaked secrets. */
 export function scanOutboundSecrets(
   payload: unknown,
   knownDecryptedSecrets: string[] = []
@@ -87,7 +217,7 @@ export function scanOutboundSecrets(
   return { ok: true };
 }
 
-/** 4. Sanitizes inbound MCP tool responses against indirect prompt injection. */
+/** 5. Sanitizes inbound MCP tool responses against indirect prompt injection. */
 export function sanitizeInboundToolResult(result: CallToolResult): {
   result: CallToolResult;
   sanitizedFlags: string[];
@@ -111,7 +241,7 @@ export function sanitizeInboundToolResult(result: CallToolResult): {
   };
 }
 
-/** 5. Per-caller tool-call velocity & identical-failure loop circuit breaker. */
+/** 6. Per-caller tool-call velocity & identical-failure loop circuit breaker. */
 interface CallerWindow {
   timestamps: number[];
   lastFailedKey: string | null;

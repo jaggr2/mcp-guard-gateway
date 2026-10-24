@@ -60,6 +60,10 @@ export interface ProjectRow {
   awsRoleArn: string | null;
   awsDeployRoleArn: string | null;
   allowedUpstreams: string;
+  /** Browser Broker: CSV of allowed navigation domains (`*` = any, `''` = any non-private). */
+  browserAllowedDomains: string;
+  /** Browser Broker: CSV of private hostnames/IPs navigation may still reach (exact match, port suffix allowed). */
+  browserInternalTargets: string;
   tokenHash: string | null;
   status: string;
   branch: string;
@@ -148,6 +152,8 @@ function mapProjectRow(r: Record<string, unknown>): ProjectRow {
     awsRoleArn: r.aws_role_arn == null ? null : String(r.aws_role_arn),
     awsDeployRoleArn: r.aws_deploy_role_arn == null ? null : String(r.aws_deploy_role_arn),
     allowedUpstreams: String(r.allowed_upstreams ?? "*"),
+    browserAllowedDomains: String(r.browser_allowed_domains ?? ""),
+    browserInternalTargets: String(r.browser_internal_targets ?? ""),
     tokenHash: r.token_hash == null ? null : String(r.token_hash),
     status: String(r.status ?? "stopped"),
     branch: String(r.branch ?? "main"),
@@ -445,19 +451,24 @@ export class ConfigStore {
     return row ? mapProjectRow(row) : undefined;
   }
 
-  upsertProject(p: Omit<ProjectRow, "createdAt" | "updatedAt">): void {
+  upsertProject(
+    p: Omit<ProjectRow, "createdAt" | "updatedAt" | "browserAllowedDomains" | "browserInternalTargets"> &
+      Partial<Pick<ProjectRow, "browserAllowedDomains" | "browserInternalTargets">>
+  ): void {
     const ts = nowIso();
     this.db
       .prepare(
         `INSERT INTO projects (
            slug, display_name, repo_url, template, lifecycle_mode, idle_timeout_minutes,
            daily_budget_usd, monthly_budget_usd, hourly_token_cap, daily_token_cap,
-           aws_role_arn, aws_deploy_role_arn, allowed_upstreams, token_hash,
+           aws_role_arn, aws_deploy_role_arn, allowed_upstreams,
+           browser_allowed_domains, browser_internal_targets, token_hash,
            status, branch, dirty_files, last_active_at, created_at, updated_at
          ) VALUES (
            @slug, @displayName, @repoUrl, @template, @lifecycleMode, @idleTimeoutMinutes,
            @dailyBudgetUsd, @monthlyBudgetUsd, @hourlyTokenCap, @dailyTokenCap,
-           @awsRoleArn, @awsDeployRoleArn, @allowedUpstreams, @tokenHash,
+           @awsRoleArn, @awsDeployRoleArn, @allowedUpstreams,
+           @browserAllowedDomains, @browserInternalTargets, @tokenHash,
            @status, @branch, @dirtyFiles, @lastActiveAt, @ts, @ts
          )
          ON CONFLICT(slug) DO UPDATE SET
@@ -473,6 +484,8 @@ export class ConfigStore {
            aws_role_arn = @awsRoleArn,
            aws_deploy_role_arn = @awsDeployRoleArn,
            allowed_upstreams = @allowedUpstreams,
+           browser_allowed_domains = @browserAllowedDomains,
+           browser_internal_targets = @browserInternalTargets,
            token_hash = COALESCE(@tokenHash, projects.token_hash),
            status = @status,
            branch = @branch,
@@ -482,6 +495,8 @@ export class ConfigStore {
       )
       .run({
         ...p,
+        browserAllowedDomains: p.browserAllowedDomains ?? "",
+        browserInternalTargets: p.browserInternalTargets ?? "",
         ts,
       });
   }

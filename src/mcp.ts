@@ -18,6 +18,7 @@ import { injectReasonSchema, requiresReason, resolvePolicy } from "./policy";
 import { startApproval } from "./guards/hitl";
 import { assertReason, extractReason, recordAudit, stripReason } from "./guards/reason";
 import {
+  enforceBrowserBoundary,
   enforceRepoBoundary,
   isUpstreamAllowedForProject,
   LoopCircuitBreaker,
@@ -163,6 +164,20 @@ async function callTool(
     return errorResult(repoGuard.reason);
   }
 
+  // Guard: Browser boundary check for Playwright/DevTools navigation tools
+  const browserGuard = enforceBrowserBoundary(callerProject, name, cleanArgs);
+  if (!browserGuard.ok) {
+    await recordAudit(
+      { store: deps.store, callerId: deps.callerId },
+      name,
+      cleanArgs,
+      reason,
+      "denied",
+      { upstreamStatus: `browser boundary: ${browserGuard.reason}` }
+    );
+    return errorResult(browserGuard.reason);
+  }
+
   // Guard: Outbound secret leak check
   const secretBox = new SecretBox(deps.config.masterKey);
   const decryptedSecrets: string[] = [];
@@ -202,7 +217,7 @@ async function callTool(
 
   let result: CallToolResult;
   try {
-    result = await client.callTool(name.slice(`${client.namespace}_`.length), cleanArgs);
+    result = await client.callTool(name.slice(`${client.namespace}_`.length), cleanArgs, deps.callerId);
   } catch (err) {
     result = errorResult(
       `Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`

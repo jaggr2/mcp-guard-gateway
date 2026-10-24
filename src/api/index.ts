@@ -201,6 +201,8 @@ export function registerApi(
         awsRoleArn: p.awsRoleArn,
         awsDeployRoleArn: p.awsDeployRoleArn,
         allowedUpstreams: p.allowedUpstreams,
+        browserAllowedDomains: p.browserAllowedDomains,
+        browserInternalTargets: p.browserInternalTargets,
         status: p.status,
         branch: p.branch,
         dirtyFiles: p.dirtyFiles,
@@ -244,6 +246,10 @@ export function registerApi(
       awsRoleArn: typeof body.awsRoleArn === "string" && body.awsRoleArn.trim() ? body.awsRoleArn.trim() : null,
       awsDeployRoleArn: typeof body.awsDeployRoleArn === "string" && body.awsDeployRoleArn.trim() ? body.awsDeployRoleArn.trim() : null,
       allowedUpstreams: typeof body.allowedUpstreams === "string" ? body.allowedUpstreams : "*",
+      browserAllowedDomains:
+        typeof body.browserAllowedDomains === "string" ? body.browserAllowedDomains : "",
+      browserInternalTargets:
+        typeof body.browserInternalTargets === "string" ? body.browserInternalTargets : "",
       tokenHash,
       status: "running",
       branch: "main",
@@ -289,6 +295,10 @@ export function registerApi(
       awsRoleArn: typeof body.awsRoleArn === "string" ? body.awsRoleArn || null : existing.awsRoleArn,
       awsDeployRoleArn: typeof body.awsDeployRoleArn === "string" ? body.awsDeployRoleArn || null : existing.awsDeployRoleArn,
       allowedUpstreams: typeof body.allowedUpstreams === "string" ? body.allowedUpstreams : existing.allowedUpstreams,
+      browserAllowedDomains:
+        typeof body.browserAllowedDomains === "string" ? body.browserAllowedDomains : existing.browserAllowedDomains,
+      browserInternalTargets:
+        typeof body.browserInternalTargets === "string" ? body.browserInternalTargets : existing.browserInternalTargets,
     });
     return c.json({ ok: true, slug });
   });
@@ -687,6 +697,66 @@ h1{margin:0 0 .5rem;font-size:1.4rem}p{color:#8b949e;margin:.3rem 0;font-size:.9
   api.delete("/secrets/:name", admin, (c) => {
     configStore.deleteSecret(c.req.param("name"));
     return c.json({ ok: true });
+  });
+
+  // browser orchestrator proxy (Browser Broker) --------------------------------
+  // Thin pass-through to the browser-host orchestrator; response shapes pass
+  // through unchanged so the UI/HA can evolve independently. Auth: Warden's own
+  // route auth in front, ORCHESTRATOR_TOKEN (encrypted secrets table) behind.
+  const orchestratorFetch = async (path: string, init?: RequestInit): Promise<Response> => {
+    const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
+    const ciphertext = configStore.getSecret("ORCHESTRATOR_TOKEN");
+    if (ciphertext) {
+      try {
+        headers.Authorization = `Bearer ${secrets.decrypt(ciphertext)}`;
+      } catch {
+        /* undecryptable secret — proxy without the bearer token */
+      }
+    }
+    const base = (configStore.getSetting("browser.orchestratorUrl") ?? config.browserOrchestratorUrl).replace(/\/$/, "");
+    try {
+      return await fetch(`${base}${path}`, { ...init, headers });
+    } catch (err) {
+      return new Response(
+        JSON.stringify({
+          error: "browser orchestrator unreachable",
+          detail: err instanceof Error ? err.message : String(err),
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  };
+
+  const passThrough = (upstream: Response): Response =>
+    new Response(upstream.body, {
+      status: upstream.status,
+      headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
+    });
+
+  api.get("/browser/sessions", anyAuth, async () => {
+    return passThrough(await orchestratorFetch("/api/sessions"));
+  });
+
+  api.get("/browser/sessions/:slug", anyAuth, async (c) => {
+    const slug = c.req.param("slug");
+    if (!/^[a-z0-9-]{1,32}$/.test(slug)) return c.json({ error: "invalid slug" }, 400);
+    return passThrough(await orchestratorFetch(`/api/sessions/${slug}`));
+  });
+
+  api.post("/browser/sessions/:slug/mode", operator, async (c) => {
+    const slug = c.req.param("slug");
+    if (!/^[a-z0-9-]{1,32}$/.test(slug)) return c.json({ error: "invalid slug" }, 400);
+    return passThrough(
+      await orchestratorFetch(`/api/sessions/${slug}/mode`, {
+        method: "POST",
+        headers: { "Content-Type": c.req.header("content-type") ?? "application/json" },
+        body: await c.req.text(),
+      })
+    );
+  });
+
+  api.get("/browser/artifacts/:id", anyAuth, async (c) => {
+    return passThrough(await orchestratorFetch(`/artifacts/${c.req.param("id")}`));
   });
 
   app.route("/api", api);
