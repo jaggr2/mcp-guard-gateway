@@ -56,8 +56,10 @@ export class HomeAssistantNotifier implements HermesBridge {
           data: {
             tag: `warden-${approvalId}`,
             importance: "high",
+            // Tapping the notification body opens the pending-approvals card in the HA app.
+            url: "/dashboard-rack/ai-sandboxes",
             actions: [
-              { action: `WARDEN_APPROVE_${approvalId}`, title: "✅ Approve (30m)" },
+              { action: `WARDEN_APPROVE_${approvalId}`, title: "✅ Approve" },
               { action: `WARDEN_DENY_${approvalId}`, title: "❌ Deny" },
             ],
           },
@@ -73,7 +75,7 @@ export class HomeAssistantNotifier implements HermesBridge {
         body: JSON.stringify({
           notification_id: `warden_${approvalId}`,
           title,
-          message: `${message}\n\nApprove in Home Assistant (AI & Sandboxes view) or at warden.jaggi.xyz/approvals.`,
+          message: `${message}\n\n[Open the pending approvals card](/dashboard-rack/ai-sandboxes) or approve at [warden.jaggi.xyz/approvals](https://warden.jaggi.xyz/approvals).`,
         }),
       }).catch(() => undefined);
 

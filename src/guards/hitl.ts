@@ -61,15 +61,18 @@ export async function startApproval(
 ): Promise<StartedApproval> {
   const now = Date.now();
   const approvalId = crypto.randomUUID();
-  const expiresAt = policy.ttl_minutes ? new Date(now + policy.ttl_minutes * 60_000).toISOString() : null;
+  // Default auto-expiry: 60 minutes, fail-closed (auto-deny) unless the policy says otherwise.
+  const ttlMinutes = policy.ttl_minutes ?? 60;
+  const timeoutAction = policy.timeout_action ?? "deny";
+  const expiresAt = new Date(now + ttlMinutes * 60_000).toISOString();
 
   await deps.store.createApproval({
     id: approvalId,
     tool,
     args: JSON.stringify(args),
     reason,
-    timeout_action: policy.timeout_action,
-    ttl_minutes: policy.ttl_minutes,
+    timeout_action: timeoutAction,
+    ttl_minutes: ttlMinutes,
     created_at: new Date(now).toISOString(),
     expires_at: expiresAt,
   });
