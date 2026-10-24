@@ -37,9 +37,14 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
   }
 
   // Browser Broker upstreams (browser-host orchestrator facade) — always attempted,
-  // seedUpstream() skips namespaces that already exist.
-  seedUpstream(configStore, "playwright", "Playwright Browser", "http://browser-host:8940/mcp", "block", {});
-  seedUpstream(configStore, "devtools", "Chrome DevTools", "http://browser-host:8940/devtools", "block", {});
+  // seedUpstream() skips namespaces that already exist. URL comes from
+  // BROWSER_ORCHESTRATOR_URL so runtimes without the `browser-host` DNS name
+  // (podman→incus) can point at the IP instead. The facade requires its bearer
+  // token (from the encrypted ORCHESTRATOR_TOKEN secret) — without it every call
+  // 401s and trust pinning stays fail-closed, so self-heal the header on boot.
+  seedUpstream(configStore, "playwright", "Playwright Browser", `${config.browserOrchestratorUrl}/mcp`, "block", {});
+  seedUpstream(configStore, "devtools", "Chrome DevTools", `${config.browserOrchestratorUrl}/devtools`, "block", {});
+  ensureBrowserUpstreamAuth(configStore, secrets);
 
   for (const [name, value] of Object.entries(config.seedSecrets)) {
     if (configStore.getSecret(name) === null) {
@@ -193,5 +198,30 @@ export function ensureBrowserPolicies(configStore: ConfigStore): void {
     if (!configStore.getUpstream(p.upstream)) continue; // upstream deleted — skip (policies FK upstreams)
     if (configStore.getPolicy(p.upstream, p.tool)) continue;
     configStore.upsertPolicy(p);
+  }
+}
+
+/**
+ * Ensures the browser upstreams authenticate to the orchestrator facade: sets the
+ * `Authorization` header on the playwright/devtools upstream rows from the encrypted
+ * ORCHESTRATOR_TOKEN secret. Runs on every boot — the secret is the source of truth,
+ * so token rotation self-heals on restart (without this every call 401s and trust
+ * pinning stays fail-closed).
+ */
+export function ensureBrowserUpstreamAuth(configStore: ConfigStore, secrets: SecretBox): void {
+  const ct = configStore.getSecret("ORCHESTRATOR_TOKEN");
+  if (ct === null) return;
+  let token: string;
+  try {
+    token = secrets.decrypt(ct);
+  } catch {
+    return;
+  }
+  if (!token) return;
+  const headerMap: Record<string, string> = { Authorization: `Bearer ${token}` };
+  for (const ns of ["playwright", "devtools"]) {
+    const up = configStore.getUpstream(ns);
+    if (!up) continue;
+    configStore.upsertUpstream({ ...up, headerMap });
   }
 }
