@@ -22,7 +22,6 @@ import {
   extractSandboxSlugFromHost,
   handleSandboxReverseProxy,
   renderSandboxPickerHtml,
-  runSandboxCtl,
   sweepIdleSandboxes,
 } from "./sandboxes/proxy";
 
@@ -102,10 +101,29 @@ export function createApp(env: Record<string, string | undefined>): Hono {
       if (!rest.startsWith("/auth/connect/")) {
         const hasSession = /(?:^|;\s*)opencode_session/.test(c.req.header("cookie") ?? "");
         if (search.get("pair") === "1" || (!rest && !hasSession)) {
-          const mint = await runSandboxCtl(config.sandboxCtlScript, ["pair", targetSlug, "--json"]);
-          const code = mint.data?.code;
-          if (typeof code === "string" && code.length > 0) {
-            return sandboxRedirect(`/s/${targetSlug}/auth/connect/${code}`);
+          // Mint a one-time pairing code straight from the sandbox's API (Basic auth
+          // with the OPENCODE_SERVER_PASSWORD that sandbox-ctl syncs into the gateway
+          // settings DB). No host-side exec needed — the gateway container has no incus.
+          const upstream = configStore.getSetting(`sandbox.${targetSlug}.upstreamUrl`);
+          const uiPassword = configStore.getSetting(`sandbox.${targetSlug}.uiPassword`);
+          if (upstream && uiPassword) {
+            try {
+              const pairRes = await fetch(`${upstream.replace(/\/$/, "")}/api/pair`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`opencode:${uiPassword}`).toString("base64")}`,
+                },
+                signal: AbortSignal.timeout(5000),
+              });
+              if (pairRes.ok) {
+                const pairBody = (await pairRes.json()) as { code?: unknown };
+                if (typeof pairBody.code === "string" && pairBody.code.length > 0) {
+                  return sandboxRedirect(`/s/${targetSlug}/auth/connect/${pairBody.code}`);
+                }
+              }
+            } catch {
+              /* sandbox unreachable — fall through to the plain redirect (wake splash) */
+            }
           }
         }
       }
