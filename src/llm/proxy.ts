@@ -198,13 +198,17 @@ export async function handleLlmProxy(
     const override = configStore.getSetting(`llm.${provider}.baseUrl`);
     if (override) {
       targetUrl = `${override.replace(/\/$/, "")}/${cleanSubpath}`;
-    } else if (parsedModel.startsWith("gemini") || cleanSubpath.startsWith("v1beta/")) {
+    } else if (cleanSubpath.includes("generateContent")) {
+      // Google-native Gemini API (models/<id>:generateContent / :streamGenerateContent)
       targetUrl = `${GO}/google/${cleanSubpath.replace(/^v1\//, "v1beta/")}`;
     } else if (cleanSubpath.includes("messages")) {
       targetUrl = `${GO}/anthropic/${cleanSubpath}`;
     } else if (cleanSubpath.includes("responses")) {
       targetUrl = `${GO}/openai/${cleanSubpath}`;
     } else if (cleanSubpath.includes("chat/completions")) {
+      // OpenCode Go serves chat/completions from the openai family for ALL model
+      // families (GLM, Gemini, Claude, ...); google/anthropic families only speak
+      // their native APIs.
       targetUrl = `${GO}/openai/${cleanSubpath}`;
     } else {
       targetUrl = `${GO}/${cleanSubpath}`; // /v1/models etc.
