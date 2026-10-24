@@ -144,6 +144,10 @@ export function registerApi(
     await baseDeps.store.setApprovalStatus(approvalId, status, {
       hermesUserId: body?.decidedBy ?? "homeassistant",
     });
+    const resolved = await baseDeps.store.getApproval(approvalId);
+    if (resolved) {
+      void notifier.sendResolutionCard(resolved.id, resolved.tool, resolved.reason, status);
+    }
     return c.json({ ok: true, approval_id: approvalId, status });
   });
 
@@ -581,6 +585,7 @@ export function registerApi(
     if (!row) return c.json({ error: "not found" }, 404);
     if (row.status !== "pending") return c.json({ error: "already resolved" }, 409);
     await deps.store.setApprovalStatus(row.id, action, { hermesUserId: c.get("auth").callerId });
+    void notifier.sendResolutionCard(row.id, row.tool, row.reason, action);
     return c.json({ ok: true, approval_id: row.id, status: body.action });
   });
 
@@ -613,6 +618,7 @@ export function registerApi(
       headline = `⚠️ Already ${row.status}`;
     } else {
       await deps.store.setApprovalStatus(row.id, action, { hermesUserId: c.get("auth").callerId });
+      void notifier.sendResolutionCard(row.id, row.tool, row.reason, action);
       headline = raw === "approve" ? "✅ Approved" : "❌ Denied";
     }
     const detail = row ? `${row.tool} — ${row.reason}` : c.req.param("id");

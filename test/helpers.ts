@@ -12,6 +12,7 @@ import type { UpstreamTool } from "../src/upstream/client";
 
 export class FakeHermes implements HermesBridge {
   cards: { tool: string; reason: string; args: Record<string, unknown>; approvalId: string }[] = [];
+  resolutions: { approvalId: string; tool: string; status: string }[] = [];
   notifications: string[] = [];
 
   async sendApprovalCard(
@@ -22,6 +23,15 @@ export class FakeHermes implements HermesBridge {
   ): Promise<string> {
     this.cards.push({ tool, reason, args, approvalId });
     return `telegram:card:${this.cards.length}`;
+  }
+
+  async sendResolutionCard(
+    approvalId: string,
+    tool: string,
+    reason: string,
+    status: "approved" | "denied" | "expired"
+  ): Promise<void> {
+    this.resolutions.push({ approvalId, tool, status });
   }
 
   async notify(message: string): Promise<void> {

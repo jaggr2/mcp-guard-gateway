@@ -173,8 +173,8 @@ async function runApproved(deps: Deps, row: ApprovalRow): Promise<CallToolResult
   return result;
 }
 
-/** Notifies the operator when a timeout resolves an approval. */
+/** Notifies the operator when an approval resolves (timeout path); swaps the pending card. */
 async function notifyResolved(deps: Deps, row: ApprovalRow): Promise<void> {
   const status = row.status === "approved" ? "approved" : row.status === "denied" ? "denied" : "expired";
-  await deps.hermes.notify(`⏰ Approval for \`${row.tool}\` ${status} without a decision.`);
+  await deps.hermes.sendResolutionCard(row.id, row.tool, row.reason, status);
 }

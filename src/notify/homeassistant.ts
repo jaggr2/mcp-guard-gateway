@@ -91,6 +91,54 @@ export class HomeAssistantNotifier implements HermesBridge {
     }
   }
 
+  /**
+   * Replaces the actionable approval notification with a resolved-status one
+   * (same `tag` makes Android swap them, so tapping a button has instant visual
+   * feedback) and dismisses the matching HA persistent notification.
+   */
+  async sendResolutionCard(
+    approvalId: string,
+    tool: string,
+    reason: string,
+    status: "approved" | "denied" | "expired"
+  ): Promise<void> {
+    if (!this.hassUrl || !this.hassToken) {
+      return;
+    }
+    const icon = status === "approved" ? "✅" : status === "denied" ? "❌" : "⏰";
+    const label = status === "approved" ? "Approved" : status === "denied" ? "Denied" : "Expired (auto-denied)";
+    try {
+      const sent = await fetch(`${this.hassUrl}/api/services/notify/${this.notifyService}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.hassToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: `${icon} Warden approval ${label}: ${tool}`,
+          message: reason,
+          data: {
+            tag: `warden-${approvalId}`, // same tag replaces the pending actionable notification
+            url: "/dashboard-rack/ai-sandboxes",
+          },
+        }),
+      });
+      if (!sent.ok) {
+        console.warn(`[warden-notify] HA resolution notify failed: HTTP ${sent.status}`);
+      }
+      await fetch(`${this.hassUrl}/api/services/persistent_notification/dismiss`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.hassToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ notification_id: `warden_${approvalId}` }),
+      }).catch(() => undefined);
+    } catch {
+      /* best-effort */
+    }
+  }
+
   async notify(message: string): Promise<void> {
     if (!this.hassUrl || !this.hassToken) {
       return;

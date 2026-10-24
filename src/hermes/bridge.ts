@@ -17,6 +17,17 @@ export interface HermesBridge {
     approvalId: string
   ): Promise<string | null>;
 
+  /**
+   * Replaces the pending approval card with a resolved-status card (same tag),
+   * so mobile action buttons give immediate visual feedback.
+   */
+  sendResolutionCard(
+    approvalId: string,
+    tool: string,
+    reason: string,
+    status: "approved" | "denied" | "expired"
+  ): Promise<void>;
+
   /** Sends a plain notification (drift alerts, etc.). */
   notify(message: string): Promise<void>;
 
@@ -39,6 +50,7 @@ export class NoopHermesBridge implements HermesBridge {
   async sendApprovalCard(): Promise<string | null> {
     return null;
   }
+  async sendResolutionCard(): Promise<void> {}
   async notify(): Promise<void> {}
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
@@ -122,6 +134,15 @@ export class HermesBridgeImpl implements HermesBridge {
     } catch {
       return null;
     }
+  }
+
+  async sendResolutionCard(
+    approvalId: string,
+    tool: string,
+    reason: string,
+    status: "approved" | "denied" | "expired"
+  ): Promise<void> {
+    await this.notify(`\`${tool}\` ${status} — ${reason} (approval \`${approvalId}\`)`);
   }
 
   async notify(message: string): Promise<void> {
