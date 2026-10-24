@@ -584,6 +584,53 @@ export function registerApi(
     return c.json({ ok: true, approval_id: row.id, status: body.action });
   });
 
+  /**
+   * One-tap decision links for the HA dashboard's per-row ✅/❌ buttons
+   * (`GET /api/approvals/:id/decide?action=approve|deny`). Behind Authelia
+   * forward-auth like the rest of the admin API, so the operator's existing
+   * session authorizes the tap — no capability secrets in dashboards.
+   */
+  api.get("/approvals/:id/decide", operator, async (c) => {
+    // CSRF guard: only accept plain top-level navigations (a tapped link), never
+    // cross-site subresource loads (img/script/fetch) or form posts.
+    const dest = c.req.header("sec-fetch-dest");
+    const mode = c.req.header("sec-fetch-mode");
+    if ((dest !== undefined && dest !== "document") || (mode !== undefined && mode !== "navigate")) {
+      return c.text("forbidden", 403);
+    }
+    const raw = (c.req.query("action") ?? "").toLowerCase();
+    if (raw !== "approve" && raw !== "deny") {
+      return c.text("action must be approve|deny", 400);
+    }
+    const action: "approved" | "denied" = raw === "approve" ? "approved" : "denied";
+    const deps = buildDeps(config, db, c.get("auth").callerId, c.get("auth").groups, notifier);
+    const row = await deps.store.getApproval(c.req.param("id"));
+
+    let headline: string;
+    if (!row) {
+      headline = "❓ Approval not found";
+    } else if (row.status !== "pending") {
+      headline = `⚠️ Already ${row.status}`;
+    } else {
+      await deps.store.setApprovalStatus(row.id, action, { hermesUserId: c.get("auth").callerId });
+      headline = raw === "approve" ? "✅ Approved" : "❌ Denied";
+    }
+    const detail = row ? `${row.tool} — ${row.reason}` : c.req.param("id");
+    const hassBase = (config.hassUrl ?? configStore.getSetting("hass.url") ?? "").replace(/\/$/, "");
+    const html = `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${headline}</title>
+<style>body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:2rem 2.5rem;text-align:center;max-width:90vw}
+h1{margin:0 0 .5rem;font-size:1.4rem}p{color:#8b949e;margin:.3rem 0;font-size:.92rem}</style></head>
+<body><div class="card"><h1>${headline}</h1><p>${detail.replace(/[<>&]/g, "")}</p>
+<p>Taking you back to Home Assistant…</p>
+<p><a href="${hassBase}/dashboard-rack/ai-sandboxes" style="color:#58a6ff">Open the approvals card</a></p></div>
+<script>setTimeout(function(){ if (history.length > 1) history.back(); }, 1200);</script>
+</body></html>`;
+    return c.html(html);
+  });
+
   // clients (machine auth tokens) ---------------------------------------------
   api.get("/clients", anyAuth, (c) => {
     return c.json({
