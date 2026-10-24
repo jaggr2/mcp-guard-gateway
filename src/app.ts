@@ -60,6 +60,15 @@ export function createApp(env: Record<string, string | undefined>): Hono {
   app.use("*", async (c, next) => {
     const host = c.req.header("host")?.split(":")[0].trim().toLowerCase() ?? "";
 
+    // 0. Machine endpoints (MCP, LLM proxy, credential brokers) are host-independent —
+    //    never swallow them into the sandbox reverse proxy. Note: `/api/*` is NOT
+    //    exempted because OpenCode Web's own API lives there and must stay proxied.
+    const machineEndpoint = /^\/(mcp|llm\/|aws-creds|git-creds|healthz|\.well-known\/)/.test(c.req.path);
+    if (machineEndpoint) {
+      await next();
+      return;
+    }
+
     // 1. Direct `/s/<slug>` switcher route (works on oc.jaggi.xyz, derog-opencode.jaggi.xyz, or warden.jaggi.xyz)
     const switchMatch = /^\/s\/([a-z0-9][a-z0-9-]{0,48}[a-z0-9])\/?$/.exec(c.req.path);
     if (switchMatch) {

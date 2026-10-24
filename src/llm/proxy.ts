@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { GatewayConfig } from "../config";
 import type { HermesBridge } from "../hermes/bridge";
 import type { SecretBox } from "../secrets";
@@ -67,7 +67,7 @@ const MODEL_PRICING_PER_1M: Record<string, { input: number; output: number }> = 
 };
 
 export function estimateCostUsd(provider: string, model: string, inputTokens: number, outputTokens: number): number {
-  if (provider === "opencode-go") {
+  if (provider === "opencode-go" || provider === "warden") {
     return 0; // Subscription-based; guarded by hourly/daily token caps
   }
   const rate = MODEL_PRICING_PER_1M[model] ?? { input: 1.0, output: 3.0 };
@@ -185,26 +185,59 @@ export async function handleLlmProxy(
     }
   }
 
-  let upstreamBase = configStore.getSetting(`llm.${provider}.baseUrl`) ?? providerSpec.baseUrl;
-  let cleanSubpath = subpath.replace(/^\//, "");
+  let targetUrl: string;
+  const cleanSubpath = subpath.replace(/^\//, "");
   if (provider === "opencode-go" || provider === "warden") {
-    if (parsedModel.startsWith("gemini")) {
-      upstreamBase = "https://opencode.ai/inference/go/google/v1beta";
-      cleanSubpath = cleanSubpath.replace(/^v1\//, "");
-    } else if (parsedModel.startsWith("claude")) {
-      upstreamBase = "https://opencode.ai/inference/go/anthropic";
+    // OpenCode Go serves each model family from its own endpoint. The request path
+    // reflects the AI SDK package the model uses (see https://opencode.ai/docs/go/):
+    //   */chat/completions -> openai-compatible (GLM, Kimi, MiMo, DeepSeek, Hy, ...)
+    //   */messages         -> anthropic        (Claude Haiku 5.5, Qwen, MiniMax M3)
+    //   */responses        -> openai           (GPT/Grok Luna, Muse Spark)
+    //   gemini-*           -> google           (Gemini 4 Argon Contributor)
+    const GO = "https://opencode.ai/inference/go";
+    const override = configStore.getSetting(`llm.${provider}.baseUrl`);
+    if (override) {
+      targetUrl = `${override.replace(/\/$/, "")}/${cleanSubpath}`;
+    } else if (parsedModel.startsWith("gemini") || cleanSubpath.startsWith("v1beta/")) {
+      targetUrl = `${GO}/google/${cleanSubpath.replace(/^v1\//, "v1beta/")}`;
+    } else if (cleanSubpath.includes("messages")) {
+      targetUrl = `${GO}/anthropic/${cleanSubpath}`;
+    } else if (cleanSubpath.includes("responses")) {
+      targetUrl = `${GO}/openai/${cleanSubpath}`;
+    } else if (cleanSubpath.includes("chat/completions")) {
+      targetUrl = `${GO}/openai/${cleanSubpath}`;
+    } else {
+      targetUrl = `${GO}/${cleanSubpath}`; // /v1/models etc.
+    }
+  } else {
+    const upstreamBase = configStore.getSetting(`llm.${provider}.baseUrl`) ?? providerSpec.baseUrl;
+    targetUrl = `${upstreamBase.replace(/\/$/, "")}/${cleanSubpath}`;
+  }
+
+  // Forward the client's headers (session id, content negotiation, ...) but rebuild auth.
+  const headers = new Headers();
+  for (const [k, v] of request.headers) {
+    if (!["host", "content-length", "authorization", "x-api-key", "accept-encoding", "connection"].includes(k)) {
+      headers.set(k, v);
     }
   }
-  const targetUrl = `${upstreamBase.replace(/\/$/, "")}/${cleanSubpath}`;
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (!headers.has("User-Agent")) headers.set("User-Agent", "warden-gateway/0.1 (homelab LLM proxy)");
 
-  const headers = new Headers();
-  headers.set("Content-Type", request.headers.get("Content-Type") ?? "application/json");
-  if (provider === "anthropic") {
+  // OpenCode Go requires a stable session id per conversation for routing & prompt caching.
+  if (!headers.has("x-opencode-session")) {
+    headers.set("x-opencode-session", `warden-${project.slug}-${randomUUID()}`);
+  }
+
+  const anthropicStyle = targetUrl.includes("/anthropic/") || provider === "anthropic";
+  if (anthropicStyle) {
     headers.set("x-api-key", upstreamKey);
     headers.set("anthropic-version", request.headers.get("anthropic-version") ?? "2023-06-01");
-  } else {
-    headers.set("Authorization", `Bearer ${upstreamKey}`);
   }
+  if (!targetUrl.includes("/anthropic/")) {
+    headers.delete("x-api-key");
+  }
+  headers.set("Authorization", `Bearer ${upstreamKey}`);
 
   let upstreamRes: Response;
   try {
