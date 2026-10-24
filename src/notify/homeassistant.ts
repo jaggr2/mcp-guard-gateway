@@ -44,7 +44,7 @@ export class HomeAssistantNotifier implements HermesBridge {
     const message = `${reason}\nArgs: ${JSON.stringify(args).slice(0, 240)}\nID: ${approvalId}`;
 
     try {
-      await fetch(`${this.hassUrl}/api/services/notify/${this.notifyService}`, {
+      const sent = await fetch(`${this.hassUrl}/api/services/notify/${this.notifyService}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.hassToken}`,
@@ -65,8 +65,11 @@ export class HomeAssistantNotifier implements HermesBridge {
           },
         }),
       });
+      if (!sent.ok) {
+        console.warn(`[warden-notify] HA notify ${this.notifyService} failed: HTTP ${sent.status}`);
+      }
 
-      await fetch(`${this.hassUrl}/api/services/persistent_notification/create`, {
+      const persist = await fetch(`${this.hassUrl}/api/services/persistent_notification/create`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.hassToken}`,
@@ -78,6 +81,9 @@ export class HomeAssistantNotifier implements HermesBridge {
           message: `${message}\n\n[Open the pending approvals card](/dashboard-rack/ai-sandboxes) or approve at [warden.jaggi.xyz/approvals](https://warden.jaggi.xyz/approvals).`,
         }),
       }).catch(() => undefined);
+      if (persist && !persist.ok) {
+        console.warn(`[warden-notify] HA persistent_notification failed: HTTP ${persist.status}`);
+      }
 
       return `ha:${approvalId}`;
     } catch {
@@ -90,7 +96,7 @@ export class HomeAssistantNotifier implements HermesBridge {
       return;
     }
     try {
-      await fetch(`${this.hassUrl}/api/services/notify/${this.notifyService}`, {
+      const sent = await fetch(`${this.hassUrl}/api/services/notify/${this.notifyService}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.hassToken}`,
@@ -101,6 +107,9 @@ export class HomeAssistantNotifier implements HermesBridge {
           message,
         }),
       });
+      if (!sent.ok) {
+        console.warn(`[warden-notify] HA notify ${this.notifyService} failed: HTTP ${sent.status}`);
+      }
     } catch {
       /* best-effort */
     }
