@@ -23,7 +23,6 @@ import {
   handleSandboxReverseProxy,
   renderSandboxPickerHtml,
   sweepIdleSandboxes,
-  WORKSPACE_B64,
 } from "./sandboxes/proxy";
 
 export interface AppRuntime {
@@ -79,7 +78,8 @@ export function createApp(env: Record<string, string | undefined>): Hono {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `/${WORKSPACE_B64}/session`,
+          // OpenCode V2's web UI is a single-page app served from `/`
+          Location: `/`,
           "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
         },
       });

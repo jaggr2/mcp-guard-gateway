@@ -4,18 +4,15 @@ import type { ConfigStore, ProjectRow } from "../store/config";
 
 const execFileAsync = promisify(execFile);
 
-/** Base64url of `/home/opencode/workspace` used by OpenCode Web's `/:dir/session` router. */
+/** `/home/opencode/workspace` — the fixed workspace path inside every sandbox. */
 export const WORKSPACE_PATH = "/home/opencode/workspace";
-export const WORKSPACE_B64 = Buffer.from(WORKSPACE_PATH, "utf8").toString("base64url");
-
-const initializedProjects = new Set<string>();
 
 /**
- * Wake-on-Visit Reverse Proxy, Auto-Project Initializer & Idle Sandbox Manager.
+ * Wake-on-Visit Reverse Proxy & Idle Sandbox Manager.
  *
  * Supports three routing modes simultaneously (so no Cloudflare wildcard is required!):
  *   1. Single-hostname mode on `oc.jaggi.xyz` (and `derog-opencode.jaggi.xyz`):
- *      - `GET /s/<project>` sets cookie `warden_sandbox=<project>` and redirects to `/<WORKSPACE_B64>/session`
+ *      - `GET /s/<project>` sets cookie `warden_sandbox=<project>` and redirects to `/`
  *      - All subsequent requests on `/*` proxy to the active `warden_sandbox` cookie!
  *      - `GET /picker` (or `/` with no cookie) renders a fast Sandbox Switcher page.
  *   2. Flat subdomain mode (`oc-<project>.jaggi.xyz`).
@@ -59,76 +56,27 @@ export async function runSandboxCtl(
   }
 }
 
-/**
- * Ensures the sandbox's OpenCode SQLite DB has initialized `/home/opencode/workspace`
- * and set its display name to `project.slug` (instead of "workspace").
+/*
+ * Project naming is handled host-side by `sandbox-ctl.py` (`init_opencode_project`),
+ * which talks to OpenCode V2's `/api/project` API with the sandbox's service
+ * credentials. The old V1 `/project/current` initializer that used to run here
+ * is gone: V2's server API is an intentional breaking change.
  */
-export async function ensureSandboxProjectInitialized(
-  upstreamOrigin: string,
-  project: ProjectRow
-): Promise<void> {
-  if (initializedProjects.has(project.slug)) return;
-  try {
-    const base = upstreamOrigin.replace(/\/$/, "");
-    const curRes = await fetch(`${base}/project/current?directory=${encodeURIComponent(WORKSPACE_PATH)}`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!curRes.ok) return;
-    const cur = (await curRes.json()) as { id?: string; name?: string };
-    if (cur?.id && cur.name !== project.slug) {
-      await fetch(`${base}/project/${encodeURIComponent(cur.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: project.slug }),
-        signal: AbortSignal.timeout(2000),
-      });
-    }
-    initializedProjects.add(project.slug);
-  } catch {
-    /* best-effort */
-  }
-}
 
 /**
  * External JS served at `/__warden-init.js` (permitted by OpenCode's `script-src 'self'` CSP).
- * Pre-seeds `localStorage["opencode.global.dat:server"]` so `/home/opencode/workspace` is
- * immediately open & expanded in OpenCode Web's sidebar, and adds a floating project switcher pill.
+ * Adds a floating Warden project-switcher pill to OpenCode V2's web UI and sets the
+ * document title to the project name. (The V1 sidebar pre-seed/router hacks are gone —
+ * V2's web UI is a different single-page app with its own state model.)
  */
 export function renderWardenInitJs(project: ProjectRow): string {
   const slugJson = JSON.stringify(project.slug);
   const titleJson = JSON.stringify(`${project.displayName} · OpenCode`);
-  const wtJson = JSON.stringify(WORKSPACE_PATH);
-  const b64Json = JSON.stringify(WORKSPACE_B64);
 
   return `(function(){
   try {
-    var wt = ${wtJson};
-    var b64 = ${b64Json};
     var slug = ${slugJson};
-    var key = "opencode.global.dat:server";
-    var raw = localStorage.getItem(key);
-    var data = raw ? JSON.parse(raw) : { list: [], projects: {}, lastProject: {}, recentlyClosed: {} };
-    data.projects = data.projects || {};
-    data.lastProject = data.lastProject || {};
-    data.recentlyClosed = data.recentlyClosed || {};
-    var scopes = ["local", window.location.origin];
-    for (var i = 0; i < scopes.length; i++) {
-      var s = scopes[i];
-      var list = Array.isArray(data.projects[s]) ? data.projects[s] : [];
-      var existing = list.find(function(p) { return p && p.worktree === wt; });
-      if (!existing) {
-        list.unshift({ worktree: wt, expanded: true });
-      } else {
-        existing.expanded = true;
-      }
-      data.projects[s] = list;
-      data.lastProject[s] = wt;
-    }
-    localStorage.setItem(key, JSON.stringify(data));
     document.title = ${titleJson};
-    if (window.location.pathname === "/" && !window.location.search.includes("home=1")) {
-      window.history.replaceState(null, "", "/" + b64 + "/session");
-    }
     window.addEventListener("DOMContentLoaded", function() {
       if (document.getElementById("warden-switcher-pill")) return;
       var pill = document.createElement("div");
@@ -303,8 +251,6 @@ export async function handleSandboxReverseProxy(
     } as RequestInit);
     clearTimeout(connectTimer);
 
-    void ensureSandboxProjectInitialized(upstreamOrigin, project);
-
     // Always strip content-encoding and content-length because Node's fetch (undici)
     // transparently decompresses gzip/br response streams while leaving the original headers intact.
     const outHeaders = new Headers(res.headers);
@@ -324,7 +270,6 @@ export async function handleSandboxReverseProxy(
     return new Response(res.body, { status: res.status, headers: outHeaders });
   } catch {
     clearTimeout(connectTimer);
-    initializedProjects.delete(slug);
     void runSandboxCtl(sandboxCtlScript, ["start", slug]);
     return new Response(renderWakeSplashHtml(project), {
       status: 200,
