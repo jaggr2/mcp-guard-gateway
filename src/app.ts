@@ -68,18 +68,24 @@ export function createApp(env: Record<string, string | undefined>): Hono {
       return;
     }
 
-    // 1. Direct `/s/<slug>` switcher route (works on oc.jaggi.xyz, derog-opencode.jaggi.xyz, or warden.jaggi.xyz)
-    const switchMatch = /^\/s\/([a-z0-9][a-z0-9-]{0,48}[a-z0-9])\/?$/.exec(c.req.path);
+    // 1. Direct `/s/<slug>` switcher route (works on oc.jaggi.xyz, derog-opencode.jaggi.xyz, or warden.jaggi.xyz).
+    //    `/s/<slug>/<path>` sets the cookie and forwards to `/<path>` — this is what makes
+    //    `opencode pair --url https://oc.jaggi.xyz/s/<slug>` login links work on the
+    //    single-hostname mode (only oc.jaggi.xyz has DNS; the subdomain modes need records).
+    const switchMatch = /^\/s\/([a-z0-9][a-z0-9-]{0,48}[a-z0-9])(\/.*)?$/.exec(c.req.path);
     if (switchMatch) {
       const targetSlug = switchMatch[1];
       if (!configStore.getProject(targetSlug)) {
         return c.text(`Sandbox '${targetSlug}' not found`, 404);
       }
+      const rest = switchMatch[2] ?? "";
+      const nextParam = new URL(c.req.url).searchParams.get("next") ?? "";
+      const next = rest && rest !== "/" ? rest : nextParam;
+      const location = next.startsWith("/") && !next.startsWith("//") ? next : "/";
       return new Response(null, {
         status: 302,
         headers: {
-          // OpenCode V2's web UI is a single-page app served from `/`
-          Location: `/`,
+          Location: location,
           "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
         },
       });
