@@ -327,27 +327,19 @@ export async function handleLlmProxy(
   }
 
   let sseBuffer = "";
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const extractUsage = (value: Record<string, unknown> | undefined): void => {
+    if (!value || typeof value !== "object") return;
+    const prompt = value.prompt_tokens ?? value.input_tokens;
+    const completion = value.completion_tokens ?? value.output_tokens;
+    if (typeof prompt === "number") inputTokens = prompt;
+    if (typeof completion === "number") outputTokens = completion;
+  };
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
-        let inputTokens = 0;
-        let outputTokens = 0;
-        const matches = sseBuffer.matchAll(/"usage"\s*:\s*(\{[^}]+\})/g);
-        for (const m of matches) {
-          try {
-            const u = JSON.parse(m[1]) as {
-              prompt_tokens?: number;
-              completion_tokens?: number;
-              input_tokens?: number;
-              output_tokens?: number;
-            };
-            inputTokens = u.prompt_tokens ?? u.input_tokens ?? inputTokens;
-            outputTokens = u.completion_tokens ?? u.output_tokens ?? outputTokens;
-          } catch {
-            /* ignore */
-          }
-        }
         const costUsd = estimateCostUsd(provider, parsedModel, inputTokens, outputTokens);
         configStore.recordLlmUsage({
           project: project.slug,
@@ -362,7 +354,23 @@ export async function handleLlmProxy(
         controller.close();
         return;
       }
-      sseBuffer += new TextDecoder().decode(value, { stream: true }).slice(-4096);
+      // Parse each complete SSE/event line so nested `usage` objects are handled correctly.
+      sseBuffer += new TextDecoder().decode(value, { stream: true });
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop() ?? "";
+      if (sseBuffer.length > 65536) sseBuffer = sseBuffer.slice(-65536);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const payload = trimmed.startsWith("data:") ? trimmed.slice(5).trim() : trimmed;
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const evt = JSON.parse(payload) as { usage?: Record<string, unknown>; message?: { usage?: Record<string, unknown> } };
+          extractUsage(evt.usage ?? evt.message?.usage);
+        } catch {
+          /* partial or non-json line */
+        }
+      }
       controller.enqueue(value);
     },
   });
