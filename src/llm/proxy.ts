@@ -222,7 +222,9 @@ export async function handleLlmProxy(
     }
   }
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (!headers.has("User-Agent")) headers.set("User-Agent", "warden-gateway/0.1 (homelab LLM proxy)");
+  // Always identify ourselves to upstreams — generic client UAs (python-urllib, curl, ...)
+  // trip Cloudflare WAF rules on opencode.ai, and Go's docs ask clients to name themselves.
+  headers.set("User-Agent", "warden-gateway/0.1 (homelab LLM proxy)");
 
   // OpenCode Go requires a stable session id per conversation for routing & prompt caching.
   if (!headers.has("x-opencode-session")) {
