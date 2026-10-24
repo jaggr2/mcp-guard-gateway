@@ -247,6 +247,9 @@ export async function handleSandboxReverseProxy(
       headers: forwardHeaders,
       body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
       duplex: "half",
+      // Forward redirects (e.g. OpenCode V2's pair-redeem 302 + Set-Cookie) to the
+      // browser instead of following them here — following would drop the session cookie.
+      redirect: "manual",
       signal: controller.signal,
     } as RequestInit);
     clearTimeout(connectTimer);
