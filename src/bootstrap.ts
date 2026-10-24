@@ -42,15 +42,19 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
     }
   }
 
-  for (const p of config.seedPolicies) {
-    configStore.upsertPolicy({
-      upstream: p.namespace,
-      tool: p.tool,
-      enabled: p.enabled ?? true,
-      guard: p.guard ?? "none",
-      timeoutAction: p.timeoutAction ?? null,
-      ttlMinutes: p.ttlMinutes ?? null,
-    });
+  // Seed default policies ONLY when none exist yet: seeding upserts, so re-running it
+  // on every boot would stomp operator changes made in the UI (and revive stale rows).
+  if (configStore.listPolicies().length === 0) {
+    for (const p of config.seedPolicies) {
+      configStore.upsertPolicy({
+        upstream: p.namespace,
+        tool: p.tool,
+        enabled: p.enabled ?? true,
+        guard: p.guard ?? "none",
+        timeoutAction: p.timeoutAction ?? null,
+        ttlMinutes: p.ttlMinutes ?? null,
+      });
+    }
   }
 
   seedSetting(configStore, "hermes.bridgeUrl", config.hermesBridgeUrl);
