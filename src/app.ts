@@ -22,6 +22,7 @@ import {
   extractSandboxSlugFromHost,
   handleSandboxReverseProxy,
   renderSandboxPickerHtml,
+  runSandboxCtl,
   sweepIdleSandboxes,
 } from "./sandboxes/proxy";
 
@@ -72,6 +73,9 @@ export function createApp(env: Record<string, string | undefined>): Hono {
     //    `/s/<slug>/<path>` sets the cookie and forwards to `/<path>` — this is what makes
     //    `opencode pair --url https://oc.jaggi.xyz/s/<slug>` login links work on the
     //    single-hostname mode (only oc.jaggi.xyz has DNS; the subdomain modes need records).
+    //    Browsers without a sandbox session get a fresh one-time pairing link minted via
+    //    sandbox-ctl (`pair --json`) so the V2 web UI opens straight into the IDE instead
+    //    of its "Connect to a server" screen. `?pair=1` forces a fresh sign-in.
     const switchMatch = /^\/s\/([a-z0-9][a-z0-9-]{0,48}[a-z0-9])(\/.*)?$/.exec(c.req.path);
     if (switchMatch) {
       const targetSlug = switchMatch[1];
@@ -79,16 +83,33 @@ export function createApp(env: Record<string, string | undefined>): Hono {
         return c.text(`Sandbox '${targetSlug}' not found`, 404);
       }
       const rest = switchMatch[2] ?? "";
-      const nextParam = new URL(c.req.url).searchParams.get("next") ?? "";
-      const next = rest && rest !== "/" ? rest : nextParam;
-      const location = next.startsWith("/") && !next.startsWith("//") ? next : "/";
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: location,
-          "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
-        },
-      });
+      const search = new URL(c.req.url).searchParams;
+      const nextParam = search.get("next") ?? "";
+      const location =
+        rest && rest !== "/"
+          ? rest
+          : nextParam.startsWith("/") && !nextParam.startsWith("//")
+            ? nextParam
+            : "/";
+      const sandboxRedirect = (to: string) =>
+        new Response(null, {
+          status: 302,
+          headers: {
+            Location: to,
+            "Set-Cookie": `warden_sandbox=${targetSlug}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`,
+          },
+        });
+      if (!rest.startsWith("/auth/connect/")) {
+        const hasSession = /(?:^|;\s*)opencode_session/.test(c.req.header("cookie") ?? "");
+        if (search.get("pair") === "1" || (!rest && !hasSession)) {
+          const mint = await runSandboxCtl(config.sandboxCtlScript, ["pair", targetSlug, "--json"]);
+          const code = mint.data?.code;
+          if (typeof code === "string" && code.length > 0) {
+            return sandboxRedirect(`/s/${targetSlug}/auth/connect/${code}`);
+          }
+        }
+      }
+      return sandboxRedirect(location);
     }
 
     // 2. Subdomain routing (`oc-<slug>.jaggi.xyz` or `<slug>.oc.jaggi.xyz`)

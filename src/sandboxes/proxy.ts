@@ -101,13 +101,16 @@ export function renderSandboxPickerHtml(projects: ProjectRow[], activeSlug: stri
   const cards = projects
     .map(
       (p) => `
-      <a class="card" href="/s/${p.slug}">
-        <div class="row">
-          <strong>${p.displayName}</strong>
-          <span class="badge ${p.status === "running" ? "running" : ""}">${p.status}</span>
-        </div>
-        <div class="meta"><code>jaggr2/${p.slug}</code> · branch <code>${p.branch}</code> · ${p.lifecycleMode}</div>
-      </a>`
+      <div class="entry">
+        <a class="card" href="/s/${p.slug}">
+          <div class="row">
+            <strong>${p.displayName}</strong>
+            <span class="badge ${p.status === "running" ? "running" : ""}">${p.status}</span>
+          </div>
+          <div class="meta"><code>jaggr2/${p.slug}</code> · branch <code>${p.branch}</code> · ${p.lifecycleMode}</div>
+        </a>
+        <a class="pair" href="/s/${p.slug}?pair=1" title="Mint a fresh login session (use when the web UI shows &quot;Connect to a server&quot;)">Sign in</a>
+      </div>`
     )
     .join("\n");
 
@@ -129,6 +132,14 @@ export function renderSandboxPickerHtml(projects: ProjectRow[], activeSlug: stri
     h1 { font-size: 1.5rem; margin: 0 0 0.3rem; }
     p.sub { color: #8b949e; margin: 0 0 1.5rem; font-size: 0.92rem; }
     .grid { display: flex; flex-direction: column; gap: 0.75rem; }
+    .entry { display: flex; gap: 0.75rem; align-items: stretch; }
+    .entry .card { flex: 1; }
+    a.pair {
+      display: flex; align-items: center; padding: 0 1.1rem; text-decoration: none;
+      color: #58a6ff; background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      font-size: 0.85rem; white-space: nowrap; transition: border-color 0.15s;
+    }
+    a.pair:hover { border-color: #58a6ff; }
     a.card {
       display: block; text-decoration: none; color: inherit;
       background: #161b22; border: 1px solid #30363d; border-radius: 12px;
