@@ -77,7 +77,8 @@ export class TrustService {
           if (current.state !== "ok") {
             this.config.upsertTrust({ ...current, state: "ok" });
           }
-        } else {
+        } else if (current.state !== "drift") {
+          // Only notify on the transition into drift — not on every re-check cycle.
           this.config.upsertTrust({ ...current, state: "drift" });
           void this.onDrift?.notify(
             client.namespace,
