@@ -96,8 +96,21 @@ export async function checkApproval(deps: Deps, approvalId: string): Promise<Cal
   switch (row.status) {
     case "approved":
       return runApproved(deps, row);
-    case "denied":
+    case "denied": {
+      // Audit the denied attempt exactly once (claim pattern mirrors runApproved).
+      const claimed = await deps.store.claimApprovalResult(row.id, "denied");
+      if (claimed) {
+        await recordAudit(
+          { store: deps.store, callerId: deps.callerId },
+          row.tool,
+          JSON.parse(row.args),
+          row.reason,
+          "denied",
+          { approvedBy: row.hermes_user_id, expiresAt: row.expires_at }
+        );
+      }
       return errorResult(`Approval ${approvalId} was denied by the operator`);
+    }
     case "expired":
       return errorResult(`Approval ${approvalId} expired without approval`);
     case "pending": {

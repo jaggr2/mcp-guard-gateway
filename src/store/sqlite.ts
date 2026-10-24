@@ -143,7 +143,7 @@ export class SqliteStore implements Store {
       .prepare(
         `UPDATE approvals
          SET result = ?
-         WHERE id = ? AND status = 'approved' AND result IS NULL`
+         WHERE id = ? AND status IN ('approved', 'denied') AND result IS NULL`
       )
       .run(sentinel, id);
     return Promise.resolve(res.changes > 0);

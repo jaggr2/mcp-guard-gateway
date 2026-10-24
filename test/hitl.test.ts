@@ -60,6 +60,15 @@ describe("checkApproval", () => {
     await deps.store.setApprovalStatus(started.approval_id, "denied", { hermesUserId: "operator" });
     const result = await checkApproval(deps, started.approval_id);
     expect(result.isError).toBe(true);
+
+    const audit = await deps.store.queryAudit({ tool: "nanokvm_click_mouse" });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].decision).toBe("denied");
+    expect(audit[0].approved_by).toBe("operator");
+
+    // Polling again must not duplicate the audit row.
+    await checkApproval(deps, started.approval_id);
+    expect(await deps.store.queryAudit({ tool: "nanokvm_click_mouse" })).toHaveLength(1);
   });
 
   it("expires with timeout_action deny without executing", async () => {
