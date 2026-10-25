@@ -32,7 +32,7 @@ start) — see `docs/DEPLOYMENT.md` for the full checklist.
 ## Repo layout
 
 ```
-src/                     # gateway (Node 22 + Hono + SQLite)
+src/                     # gateway (Node 24 + Hono + SQLite)
   app.ts                 # Hono app: /mcp, /.well-known/*, /api/*, Angular SPA
   mcp.ts                 # SDK Server: tools/list merge + tools/call guards
   config.ts              # env -> GatewayConfig (issuers, hermes, upstreams)

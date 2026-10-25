@@ -153,6 +153,7 @@ noVNC WS to pick up the new route — the fallback UI prompts once for
 | `CHROMIUM_BIN` | `chromium` | Chromium binary |
 | `NOVNC_PATH` | `/usr/share/novnc` | noVNC client assets (dev: placeholder page) |
 | `FALLBACK_DISPLAY` | `0` | Entrypoint: start a debug Xvfb `:0` + openbox + x11vnc |
+| `ROLE` | *(unset → gateway)* | Entrypoint role switch (root `entrypoint.sh`): `browser` runs the browser-orchestrator instead of the gateway |
 
 ## Development
 
@@ -162,6 +163,21 @@ npm run build     # tsc → dist/
 npm test          # vitest (mocked ProcessSpawner/SupervisorPorts — no Xvfb needed)
 ```
 
-Image: `ghcr.io/jaggr2/mcp-guard-gateway-browser` (built by
-`.github/workflows/publish-browser.yml`, same conventions as the unifi-bridge
-image).
+## Deployment
+
+**One image, two instances.** The orchestrator ships inside the merged Warden
+image `ghcr.io/jaggr2/mcp-guard-gateway` (root `Dockerfile`, built by
+`.github/workflows/publish.yml`) together with the gateway and the browser
+runtime (Xvfb/openbox/x11vnc/noVNC/Chromium). The `warden` and `browser-host`
+Incus instances run the **same** image with different entrypoint roles
+(root `entrypoint.sh`):
+
+- `warden` — default CMD → gateway (`node dist/index.js`, port 8080)
+- `browser-host` — `ROLE=browser` → browser-orchestrator
+  (`node /app/browser/dist/index.js`, port `ORCHESTRATOR_PORT`)
+
+The standalone `ghcr.io/jaggr2/mcp-guard-gateway-browser` image,
+`.github/workflows/publish-browser.yml` and this directory's own
+`Dockerfile`/`entrypoint.sh` are gone; the orchestrator's dependency tree and
+build live in the root Dockerfile's `browser-build` stage. The package itself
+still builds and tests independently (`npm run build`, `npm test`).

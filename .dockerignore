@@ -12,3 +12,11 @@ test/
 scripts/
 bridge/
 .github/
+# browser-orchestrator subtree (formerly browser/.dockerignore) — only
+# package*.json, tsconfig.json and src/ from here enter the build context
+browser/node_modules/
+browser/dist/
+browser/test/
+browser/*.log
+browser/.env
+browser/.env.*
