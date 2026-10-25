@@ -10,6 +10,16 @@ import { TrustService } from "../src/trust/service";
 import type { HermesBridge } from "../src/hermes/bridge";
 import type { UpstreamTool } from "../src/upstream/client";
 
+/**
+ * Fake Hono node-server connection info so `getConnInfo` resolves a TCP peer in
+ * unit tests — simulates requests arriving from a trusted ingress.
+ */
+export function trustedEnv(address = "127.0.0.1"): Record<string, unknown> {
+  return {
+    incoming: { socket: { remoteAddress: address, remotePort: 55555, remoteFamily: address.includes(":") ? "IPv6" : "IPv4" } },
+  };
+}
+
 export class FakeHermes implements HermesBridge {
   cards: { tool: string; reason: string; args: Record<string, unknown>; approvalId: string }[] = [];
   resolutions: { approvalId: string; tool: string; status: string }[] = [];
@@ -62,6 +72,7 @@ export function testConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     groupsHeader: "Remote-Groups",
     adminGroups: ["admins"],
     operatorGroups: ["operators"],
+    trustedIdentityPeers: ["127.0.0.0/8", "::1", "10.30.0.2"],
     bootstrapUpstream: null,
     seedUpstreams: [],
     seedSecrets: {},

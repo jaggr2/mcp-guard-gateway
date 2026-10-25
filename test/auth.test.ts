@@ -139,15 +139,31 @@ describe("authenticateMcp", () => {
     expect(authed.groups).toContain("admins");
   });
 
-  it("falls back to forward-auth headers when no issuer is configured", async () => {
+  it("falls back to forward-auth headers from a trusted ingress peer", async () => {
     const config = loadConfig({}, null);
     const ctx = await authenticateMcp(
       new Request("https://mcp-guard.example/mcp", {
         headers: { "Remote-Email": "alice@example.com", "Remote-Groups": "operators" },
       }),
-      config
+      config,
+      undefined,
+      "127.0.0.1"
     );
     expect(ctx.callerId).toBe("alice@example.com");
+  });
+
+  it("ignores spoofed forward-auth headers from untrusted peers", async () => {
+    const config = loadConfig({}, null);
+    const ctx = await authenticateMcp(
+      new Request("https://mcp-guard.example/mcp", {
+        headers: { "Remote-Email": "mallory@example.com", "Remote-Groups": "admins" },
+      }),
+      config,
+      undefined,
+      "10.30.0.99"
+    );
+    expect(ctx.callerId).toBe("anonymous");
+    expect(ctx.groups).toEqual([]);
   });
 
   it("accepts a gateway machine service token", async () => {

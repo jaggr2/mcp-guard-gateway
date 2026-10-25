@@ -8,6 +8,8 @@ import { loadConfig, type GatewayConfig } from "./config";
 import { openDatabase } from "./db/connection";
 import { buildDeps, buildMcpServer } from "./mcp";
 import { authenticateMcp } from "./auth/middleware";
+import { normalizeAddr } from "./auth/peer";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { authServerMetadata, bearerChallenge, protectedResourceMetadata } from "./auth/metadata";
 import { registerApi } from "./api";
 import { bootstrap } from "./bootstrap";
@@ -182,7 +184,15 @@ export function createApp(env: Record<string, string | undefined>): Hono {
   });
 
   // MCP Streamable HTTP ------------------------------------------------------
-  app.all("/mcp", async (c) => handleMcp(c.req.raw, runtime));
+  app.all("/mcp", async (c) => {
+    let peer = "";
+    try {
+      peer = normalizeAddr(getConnInfo(c).remote.address ?? "");
+    } catch {
+      /* no socket info */
+    }
+    return handleMcp(c.req.raw, runtime, peer);
+  });
 
   // Agent LLM Cost & Subscription Quota Proxy (/llm/:provider/*) -------------
   app.all("/llm/:provider/*", async (c) => {
@@ -218,10 +228,10 @@ export function createApp(env: Record<string, string | undefined>): Hono {
   return app;
 }
 
-async function handleMcp(request: Request, runtime: AppRuntime): Promise<Response> {
+async function handleMcp(request: Request, runtime: AppRuntime, peer = ""): Promise<Response> {
   const { config, db, hermes } = runtime;
   const configStore = new ConfigStore(db);
-  const ctx = await authenticateMcp(request, config, configStore);
+  const ctx = await authenticateMcp(request, config, configStore, peer);
   if (config.issuers.length > 0 && ctx.callerId === "unauthenticated") {
     return new Response("Unauthorized", { status: 401, headers: bearerChallenge(config) });
   }
