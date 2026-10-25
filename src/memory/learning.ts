@@ -15,6 +15,25 @@ export interface ProposeLearningInput {
 }
 
 /**
+ * Compose the `append` block: a `## <title>` heading followed by the content.
+ *
+ * If the content already starts with a heading that repeats the title verbatim,
+ * strip that line — `append` emits the heading itself, and a repeated heading
+ * corrupts the memory file (seen in production 2026-10-25 on
+ * `memories/homelab-incus.md`: a duplicated `## ...` line plus a stray blank).
+ */
+export function composeAppendBlock(title: string, content: string): string {
+  const body = content.trim();
+  const firstLine = body.split("\n", 1)[0];
+  const heading = firstLine.match(/^#{1,6}\s+(.*?)\s*$/);
+  if (heading && heading[1].toLowerCase() === title.trim().toLowerCase()) {
+    const rest = body.slice(firstLine.length).trim();
+    return `\n\n## ${title}\n${rest ? `${rest}\n` : ""}`;
+  }
+  return `\n\n## ${title}\n${body}\n`;
+}
+
+/**
  * Validates and persists a learning or skill update proposed via `warden_propose_learning`
  * (invoked by the `learn-skill` OpenCode skill inside any sandbox).
  *
@@ -59,8 +78,7 @@ export function processLearningProposal(
 
       if (mode === "append" && existsSync(fullPath)) {
         const existing = readFileSync(fullPath, "utf8");
-        const block = `\n\n## ${input.title}\n${input.content.trim()}\n`;
-        writeFileSync(fullPath, existing.trimEnd() + block, "utf8");
+        writeFileSync(fullPath, existing.trimEnd() + composeAppendBlock(input.title, input.content), "utf8");
       } else {
         writeFileSync(fullPath, input.content.trim() + "\n", "utf8");
       }
@@ -109,7 +127,25 @@ export function processLearningProposal(
             timeout: 15_000,
           });
         } catch {
-          /* push is best-effort if offline */
+          // Diverged from origin (e.g. a host-side push landed first): rebase the
+          // learning commit on top and retry once. Push stays best-effort when
+          // offline, but a real failure must show up in the logs — it used to be
+          // swallowed silently and left learn-commits stranded on one disk.
+          try {
+            execFileSync("git", ["-C", agentMemoryDir, "pull", "--rebase", "origin", "main"], {
+              stdio: "ignore",
+              timeout: 20_000,
+            });
+            execFileSync("git", ["-C", agentMemoryDir, "push", "origin", "main"], {
+              stdio: "ignore",
+              timeout: 15_000,
+            });
+          } catch (pushError) {
+            console.warn(
+              `[warden memory] learning committed as ${commitRef} but push to origin/main failed:`,
+              pushError instanceof Error ? pushError.message : pushError
+            );
+          }
         }
       }
     } catch {
