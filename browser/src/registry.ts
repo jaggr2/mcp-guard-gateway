@@ -22,7 +22,10 @@ export interface SessionInfo {
   title: string | null;
   startedAt: number | null;
   lastActivityAt: number;
+  /** Passive noVNC watchers (view-only route — never flips the mode). */
   viewers: number;
+  /** Interactive noVNC connections (takeover route — operator input). */
+  takeoverViewers: number;
   bootCount: number;
   crashCount: number;
   ramBytes: number | null;
@@ -46,12 +49,20 @@ export interface SessionHandle {
   readonly project: string;
   readonly state: SessionState;
   readonly mode: SessionMode;
+  /** View-only x11vnc RFB port (input gated off). */
   readonly vncPort: number;
+  /** websockify WS port (→ view-only x11vnc). */
   readonly wsPort: number;
+  /** Interactive x11vnc RFB port (takeover input). */
+  readonly vncInputPort: number;
   /** Stateless JSON-RPC facade call; null response = notification (202). */
   rpc(kind: McpKind, message: JsonRpcMessage): Promise<JsonRpcMessage | null>;
-  viewerOpened(): void;
-  viewerClosed(): void;
+  /** A passive noVNC watcher (view-only route). Never flips the mode. */
+  watcherOpened(): void;
+  watcherClosed(): void;
+  /** An interactive noVNC connection (takeover route). Holds the auto-release timer. */
+  takeoverViewerOpened(): void;
+  takeoverViewerClosed(): void;
   takeover(reason: string): void;
   release(reason: string): void;
   addCastViewer(conn: ViewerConn): void;

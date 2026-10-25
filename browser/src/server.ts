@@ -4,7 +4,7 @@ import { Hono, type Context, type Next } from "hono";
 import type { Config } from "./config.js";
 import { isArtifactId, type ArtifactStore } from "./artifacts.js";
 import type { Logger } from "./logger.js";
-import { novncHandler } from "./novnc.js";
+import { novncHandler, sessionViewPage, VIEWER_JS } from "./novnc.js";
 import type { ProfileStore } from "./profiles.js";
 import type { JsonRpcMessage } from "./rpc.js";
 import {
@@ -290,6 +290,14 @@ export function createApp(deps: ServerDeps): Hono {
     return c.redirect(`/novnc/vnc.html?path=p/${encodeURIComponent(project)}/vnc&autoconnect=1&resize=scale`);
   });
 
+  // Per-session fallback view page: noVNC in an iframe + explicit Take Over /
+  // Release buttons (which call the mode API and reconnect the noVNC WS).
+  app.get("/p/:project/view", (c) => {
+    const project = c.req.param("project");
+    if (!isProjectId(project)) return c.text("invalid project slug", 400);
+    return c.html(sessionViewPage(project));
+  });
+
   // Minimal session picker fallback page (steady state: Warden UI).
   app.get("/", async (c) => {
     let sessions: SessionInfo[] = [];
@@ -302,18 +310,32 @@ export function createApp(deps: ServerDeps): Hono {
       .map(
         (s) =>
           `<tr><td>${s.project}</td><td>${s.state}</td><td>${s.mode}</td>` +
+          `<td>${s.viewers}</td><td>${s.takeoverViewers}</td>` +
+          `<td><a href="/p/${encodeURIComponent(s.project)}/view">view</a></td>` +
           `<td><a href="/p/${encodeURIComponent(s.project)}/vnc">noVNC</a></td>` +
-          `<td>${s.currentUrl ?? ""}</td></tr>`,
+          `<td>${s.currentUrl ?? ""}</td>` +
+          `<td><button onclick="takeOver('${s.project}')">Take Over</button>` +
+          `<button onclick="releaseSession('${s.project}')">Release</button></td></tr>`,
       )
       .join("\n");
     return c.html(`<!doctype html>
 <html><head><meta charset="utf-8"><title>browser-orchestrator</title></head>
 <body style="font-family: sans-serif; margin: 2rem;">
   <h1>Browser sessions</h1>
+  <p>Watching (the <em>view</em> page or <em>noVNC</em> link) is passive and never blocks the
+     agent. <strong>Take Over</strong> switches the session to <code>operator</code> mode and
+     reconnects the viewer to the interactive display; <strong>Release</strong> hands it back.</p>
   <table border="1" cellpadding="6" cellspacing="0">
-    <tr><th>project</th><th>state</th><th>mode</th><th>viewer</th><th>current URL</th></tr>
-    ${rows || '<tr><td colspan="5">no live sessions</td></tr>'}
+    <tr><th>project</th><th>state</th><th>mode</th><th>watchers</th><th>takeover</th>
+        <th>viewer</th><th>noVNC</th><th>current URL</th><th>mode control</th></tr>
+    ${rows || '<tr><td colspan="9">no live sessions</td></tr>'}
   </table>
+${VIEWER_JS}
+  <script>
+    async function takeOver(slug) { show(await setMode(slug, 'operator')); }
+    async function releaseSession(slug) { show(await setMode(slug, 'agent')); }
+    function show(info) { if (info) location.reload(); }
+  </script>
 </body></html>`);
   });
 

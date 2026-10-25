@@ -169,7 +169,7 @@ export class MockSpawner implements ProcessSpawner {
 export class MockPorts implements SupervisorPorts {
   time = 1_000_000;
   cdpReady = true;
-  listening = new Set<number>([5901, 6081, 5902, 6082]);
+  listening = new Set<number>([5901, 6081, 6091, 5902, 6082, 6092]);
   freeRam = 8 * 1024 ** 3;
   rss = 100 * 1024 ** 2;
   readonly sleepLog: number[] = [];
@@ -256,7 +256,8 @@ export function fakeViewer(): ViewerConn & { sent: unknown[]; closed: boolean } 
 
 export class FakeSession implements SessionHandle {
   readonly rpcCalls: Array<{ kind: McpKind; message: JsonRpcMessage }> = [];
-  viewerCount = 0;
+  watcherCount = 0;
+  takeoverViewerCount = 0;
   takeovers: string[] = [];
   releases: string[] = [];
   rpcImpl: (kind: McpKind, message: JsonRpcMessage) => Promise<JsonRpcMessage | null> = (
@@ -283,17 +284,29 @@ export class FakeSession implements SessionHandle {
     return 6081;
   }
 
+  get vncInputPort(): number {
+    return 6091;
+  }
+
   rpc(kind: McpKind, message: JsonRpcMessage): Promise<JsonRpcMessage | null> {
     this.rpcCalls.push({ kind, message });
     return this.rpcImpl(kind, message);
   }
 
-  viewerOpened(): void {
-    this.viewerCount++;
+  watcherOpened(): void {
+    this.watcherCount++;
   }
 
-  viewerClosed(): void {
-    this.viewerCount--;
+  watcherClosed(): void {
+    this.watcherCount--;
+  }
+
+  takeoverViewerOpened(): void {
+    this.takeoverViewerCount++;
+  }
+
+  takeoverViewerClosed(): void {
+    this.takeoverViewerCount--;
   }
 
   takeover(reason: string): void {
@@ -331,7 +344,8 @@ export class FakeSession implements SessionHandle {
       title: null,
       startedAt: 0,
       lastActivityAt: 0,
-      viewers: this.viewerCount,
+      viewers: this.watcherCount,
+      takeoverViewers: this.takeoverViewerCount,
       bootCount: 1,
       crashCount: 0,
       ramBytes: 1000,

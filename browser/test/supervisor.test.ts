@@ -25,13 +25,31 @@ describe("SessionSupervisor boot", () => {
     expect(sup.state).toBe("ready");
     expect(sup.mode).toBe("agent");
     expect(sup.bootCount).toBe(1);
-    expect(spawner.spawnFiles).toEqual(["Xvfb", "chromium", "x11vnc", "websockify", "npx", "npx"]);
+    expect(spawner.spawnFiles).toEqual([
+      "Xvfb",
+      "chromium",
+      "x11vnc",
+      "x11vnc",
+      "websockify",
+      "npx",
+      "npx",
+    ]);
 
-    // Static pool mapping: display :1 ↔ CDP 9221 ↔ vnc 5901 ↔ ws 6081.
+    // Static pool mapping: display :1 ↔ CDP 9221 ↔ vnc 5901 ↔ ws 6081 ↔ input 6091.
     const chromium = spawner.find("chromium")[0];
     expect(chromium.spec.args).toContain("--remote-debugging-port=9221");
     expect(chromium.spec.args).toContain("--remote-debugging-address=127.0.0.1");
     expect(chromium.spec.env).toMatchObject({ DISPLAY: ":1" });
+
+    // Two x11vnc processes on the same display: view-only (input gated off)
+    // and interactive (operator takeover input).
+    const vncView = spawner.find("x11vnc")[0];
+    expect(vncView.spec.args).toContain("-viewonly");
+    expect(vncView.spec.args).toContain("-rfbport");
+    expect(vncView.spec.args[vncView.spec.args.indexOf("-rfbport") + 1]).toBe("5901");
+    const vncInput = spawner.find("x11vnc")[1];
+    expect(vncInput.spec.args).not.toContain("-viewonly");
+    expect(vncInput.spec.args[vncInput.spec.args.indexOf("-rfbport") + 1]).toBe("6091");
 
     const playwright = spawner.find("npx")[0];
     expect(playwright.spec.args).toContain("@playwright/mcp");
@@ -65,8 +83,8 @@ describe("SessionSupervisor boot", () => {
     );
     await expect(supervisor.boot()).rejects.toThrow();
     expect(supervisor.state).toBe("error");
-    // Chromium dies before the MCP children spawn: 2 attempts × 4 processes.
-    expect(spawner.spawnFiles).toHaveLength(8);
+    // Chromium dies before the MCP children spawn: 2 attempts × 5 processes.
+    expect(spawner.spawnFiles).toHaveLength(10);
     // error state refuses further boots until DELETE + POST (teardown)
     await expect(supervisor.boot()).rejects.toThrow(/error state/);
   });
@@ -122,13 +140,24 @@ describe("SessionSupervisor boot", () => {
     await expect(sup.boot()).rejects.toThrow(/error state/);
   });
 
-  it("shutdown order: MCP children → Chromium (SIGKILL after grace) → x11vnc/websockify → Xvfb", async () => {
+  it("shutdown order: MCP children → Chromium (SIGKILL after grace) → both x11vnc → websockify → Xvfb", async () => {
     const { sup, spawner } = makeSupervisor({ exitOnKill: false });
     await sup.boot();
     await sup.teardown();
 
     const order = [...new Set(spawner.killLog.map((k) => k.file))];
     expect(order).toEqual(["npx", "chromium", "x11vnc", "websockify", "Xvfb"]);
+    // Both x11vnc processes (view-only + interactive) are stopped where the
+    // single one used to be: after Chromium, before websockify/Xvfb.
+    expect(spawner.killLog.filter((k) => k.signal === "SIGTERM").map((k) => k.file)).toEqual([
+      "npx",
+      "npx",
+      "chromium",
+      "x11vnc",
+      "x11vnc",
+      "websockify",
+      "Xvfb",
+    ]);
     expect(spawner.killLog.filter((k) => k.file === "chromium").map((k) => k.signal)).toEqual([
       "SIGTERM",
       "SIGKILL",

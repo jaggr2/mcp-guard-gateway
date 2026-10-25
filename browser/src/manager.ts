@@ -178,19 +178,23 @@ export class SessionManager implements SessionRegistry {
     return supervisor.toInfo();
   }
 
-  /** Idle GC (30 min) + operator auto-release (5 min without a viewer WS). */
+  /**
+   * Idle GC (30 min) + operator auto-release (5 min without an interactive
+   * viewer WS). The auto-release timer counts only **interactive** (takeover)
+   * connections — passive watchers never hold operator mode.
+   */
   async sweepIdle(): Promise<void> {
     const now = this.deps.ports.now();
     for (const [project, supervisor] of [...this.sessions.entries()]) {
       if (
         supervisor.mode === "operator" &&
-        supervisor.viewerCount === 0 &&
-        now - supervisor.lastViewerAt > this.deps.config.idleOperatorMs
+        supervisor.takeoverViewerCount === 0 &&
+        now - supervisor.lastTakeoverViewerAt > this.deps.config.idleOperatorMs
       ) {
         supervisor.release("operator idle");
       }
       const idleMs = now - supervisor.lastActivityAt;
-      const noViewers = supervisor.viewerCount === 0;
+      const noViewers = supervisor.watcherCount === 0 && supervisor.takeoverViewerCount === 0;
       if (noViewers && idleMs > this.deps.config.idleSessionMs && supervisor.state !== "booting") {
         this.deps.log.info("idle teardown", { project, idleMs });
         await this.teardown(project);

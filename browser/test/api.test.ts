@@ -131,7 +131,19 @@ describe("HTTP API", () => {
     const { app } = await makeApp();
     const home = await app.request("/", { method: "GET" });
     expect(home.status).toBe(200);
-    expect(await home.text()).toContain("Browser sessions");
+    const homeText = await home.text();
+    expect(homeText).toContain("Browser sessions");
+    // Fallback UI: explicit takeover controls (opening the viewer never flips the mode).
+    expect(homeText).toContain("Take Over");
+    expect(homeText).toContain("Release");
+
+    const view = await app.request("/p/proj/view", { method: "GET" });
+    expect(view.status).toBe(200);
+    const viewText = await view.text();
+    expect(viewText).toContain("Take Over");
+    expect(viewText).toContain("Release");
+    expect(viewText).toContain("/api/sessions/"); // calls the mode API
+    expect(viewText).toContain("reconnect"); // and reconnects the noVNC WS afterwards
 
     const novnc = await app.request("/novnc/vnc.html", { method: "GET" });
     expect(novnc.status).toBe(200);
@@ -149,7 +161,10 @@ describe("HTTP API", () => {
 
     const list = await app.request("/api/sessions", authed());
     expect(list.status).toBe(200);
-    expect(((await list.json()) as { sessions: unknown[] }).sessions).toHaveLength(1);
+    const body = (await list.json()) as { sessions: Array<Record<string, unknown>> };
+    expect(body.sessions).toHaveLength(1);
+    // viewers = passive watchers, takeoverViewers = interactive connections.
+    expect(body.sessions[0]).toMatchObject({ viewers: 0, takeoverViewers: 0 });
 
     const badMode = await app.request("/api/sessions/proj/mode", {
       ...authed({ mode: "hacker" }),

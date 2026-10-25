@@ -1,24 +1,94 @@
+import { connect as netConnect } from "node:net";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type { Logger } from "./logger.js";
 import type { SessionHandle, SessionRegistry } from "./registry.js";
 import type { ViewerConn } from "./screencast.js";
 import { isProjectId } from "./slug.js";
 
+/**
+ * Raw byte pipe to one x11vnc RFB port (a net.Socket in production; faked in
+ * tests so the routing rules are unit-testable without Xvfb).
+ */
+export interface RfbConnection {
+  write(data: Buffer): void;
+  destroy(): void;
+  onData(cb: (chunk: Buffer) => void): void;
+  /** Fires once on close *or* error. */
+  onClose(cb: () => void): void;
+}
+
+export type RfbConnector = (port: number) => Promise<RfbConnection>;
+
+/** Production connector: plain TCP to 127.0.0.1:<rfbport>. */
+export const openRfb: RfbConnector = (port) =>
+  new Promise((resolve, reject) => {
+    const socket = netConnect({ port, host: "127.0.0.1" });
+    socket.once("error", reject);
+    socket.once("connect", () => {
+      let closed = false;
+      resolve({
+        write: (data) => {
+          socket.write(data);
+        },
+        destroy: () => {
+          socket.destroy();
+        },
+        onData: (cb) => {
+          socket.on("data", cb);
+        },
+        onClose: (cb) => {
+          socket.on("close", () => {
+            closed = true;
+            cb();
+          });
+          socket.on("error", () => {
+            if (!closed) {
+              closed = true;
+              cb();
+            }
+          });
+        },
+      });
+    });
+  });
+
 export interface UpgradeDeps {
   registry: SessionRegistry;
   log: Logger;
+  /** Dial one x11vnc RFB port (defaults to {@link openRfb}). */
+  connectRfb?: RfbConnector;
+}
+
+function toBuffer(data: RawData): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (Array.isArray(data)) return Buffer.concat(data);
+  return Buffer.from(data);
 }
 
 /**
  * Viewer WebSocket endpoints (Part 10.4) — no token auth, Authelia forwardAuth
  * is in front at the reverse proxy:
- *   WS /p/:project/vnc  → raw WS proxy to websockify (608N) — interactive takeover
+ *   WS /p/:project/vnc  → RFB relay to the session's x11vnc
  *   WS /p/:project/cast → screencast frames (latest-frame-only fan-out)
+ *
+ * Watching is passive: connecting to `/vnc` never changes the session mode.
+ * The upstream port is picked **at connect time** from the session mode:
+ *   agent    → the view-only x11vnc (590N, `-viewonly`) — input never reaches
+ *              Chromium;
+ *   operator → the interactive x11vnc (609N) — takeover input flows through.
+ * Entering `operator` is explicit (`POST /api/sessions/:slug/mode`); clients
+ * that want to drive reconnect after the mode flip to pick up the interactive
+ * route.
  */
 export function createUpgradeHandler(deps: UpgradeDeps) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    // Mirror websockify: pick `binary` when offered (raw bytes in binary frames).
+    handleProtocols: (protocols) => (protocols.has("binary") ? "binary" : false),
+  });
+  const connectRfb = deps.connectRfb ?? openRfb;
 
   const viewerConn = (ws: WebSocket): ViewerConn => ({
     sendJson: (obj) => {
@@ -36,14 +106,18 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
   });
 
   async function attachVnc(ws: WebSocket, session: SessionHandle): Promise<void> {
-    const upstream = new WebSocket(`ws://127.0.0.1:${session.wsPort}`);
-    session.viewerOpened();
-    // Opening the noVNC WS flips the session to operator mode (takeover).
-    session.takeover("vnc viewer connected");
+    const interactive = session.mode === "operator";
+    const upstream = await connectRfb(interactive ? session.vncInputPort : session.vncPort);
+    if (interactive) session.takeoverViewerOpened();
+    else session.watcherOpened();
+    let closed = false;
     const closeBoth = (): void => {
-      session.viewerClosed();
+      if (closed) return;
+      closed = true;
+      if (interactive) session.takeoverViewerClosed();
+      else session.watcherClosed();
       try {
-        upstream.close();
+        upstream.destroy();
       } catch {
         /* ignore */
       }
@@ -53,10 +127,11 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
         /* ignore */
       }
     };
-    upstream.on("message", (data) => ws.send(data));
-    ws.on("message", (data) => upstream.send(data));
-    upstream.on("close", closeBoth);
-    upstream.on("error", closeBoth);
+    upstream.onData((chunk) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(chunk, { binary: true });
+    });
+    upstream.onClose(closeBoth);
+    ws.on("message", (data) => upstream.write(toBuffer(data)));
     ws.on("close", closeBoth);
     ws.on("error", closeBoth);
   }

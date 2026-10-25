@@ -6,9 +6,14 @@
  *   stopped ──────────────────────────────► booting ──ready──► ready ◄──release── operator
  *      ▲                                     │  ▲                 │               ▲
  *      │                          crash ─────┘  └── auto-reboot   │ take over     │
- *      │                                     ▼                    ▼ (noVNC open / API)
- *      └── teardown ◄── idle 30 min ◄── ready/agent          operator ──idle 5 min w/o WS──┘
+ *      │                                     ▼                    ▼ (API / Take Over button)
+ *      └── teardown ◄── idle 30 min ◄── ready/agent          operator ──idle 5 min w/o interactive WS──┘
  *                                    error (crash loop >3/5m) ── manual reset ──► stopped
+ *
+ * Opening the noVNC WS is passive and does **not** enter `operator`: watching
+ * is served by the view-only x11vnc. Entering `operator` is explicit
+ * (`POST /api/sessions/:slug/mode`); only then does viewer input reach Chromium
+ * (via the interactive x11vnc).
  */
 export const TAKEOVER_ERROR = "taken over by operator — retry after release";
 

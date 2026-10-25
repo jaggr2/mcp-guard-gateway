@@ -29,24 +29,36 @@ export interface SupervisorDeps {
   artifactCount: (project: string) => number;
 }
 
+type ProcName = "xvfb" | "chromium" | "x11vnc" | "x11vncInput" | "websockify";
+
 interface TreeAlive {
   xvfb: boolean;
   chromium: boolean;
   x11vnc: boolean;
+  x11vncInput: boolean;
   websockify: boolean;
 }
 
+const DEAD_TREE: TreeAlive = {
+  xvfb: false,
+  chromium: false,
+  x11vnc: false,
+  x11vncInput: false,
+  websockify: false,
+};
+
 /**
  * SessionSupervisor (Part 10.2/10.3): owns one session's process tree
- * (Xvfb → headed Chromium → x11vnc → websockify + two stdio MCP children),
- * runs the boot readiness gate, the crash policy and the shutdown order, and
- * exposes the stateless facade over its two MCP children.
+ * (Xvfb → headed Chromium → x11vnc view-only + x11vnc interactive → websockify
+ * + two stdio MCP children), runs the boot readiness gate, the crash policy and
+ * the shutdown order, and exposes the stateless facade over its two MCP
+ * children.
  */
 export class SessionSupervisor implements SessionHandle {
   private machine: MachineState = initialMachine();
-  private procs: Partial<Record<"xvfb" | "chromium" | "x11vnc" | "websockify", SpawnedProcess>> = {};
+  private procs: Partial<Record<ProcName, SpawnedProcess>> = {};
   private children: Partial<Record<McpKind, McpChild>> = {};
-  private treeAlive: TreeAlive = { xvfb: false, chromium: false, x11vnc: false, websockify: false };
+  private treeAlive: TreeAlive = { ...DEAD_TREE };
   private generation = 0;
   private shuttingDown = false;
   private bootPromise: Promise<void> | null = null;
@@ -56,8 +68,12 @@ export class SessionSupervisor implements SessionHandle {
   crashCount = 0;
   startedAt: number | null = null;
   lastActivityAt: number;
-  lastViewerAt = 0;
-  viewerCount = 0;
+  /** Auto-release timer reference: takeover entered / last interactive viewer left. */
+  lastTakeoverViewerAt = 0;
+  /** Passive noVNC watchers (view-only route). */
+  watcherCount = 0;
+  /** Interactive noVNC connections (takeover route). */
+  takeoverViewerCount = 0;
   profileName: string | null = null;
 
   private userDataDirOverride: string | null = null;
@@ -88,6 +104,10 @@ export class SessionSupervisor implements SessionHandle {
 
   get wsPort(): number {
     return this.slot.wsPort;
+  }
+
+  get vncInputPort(): number {
+    return this.slot.vncInputPort;
   }
 
   get chromiumPid(): number | undefined {
@@ -151,7 +171,12 @@ export class SessionSupervisor implements SessionHandle {
     };
   }
 
-  private specX11vnc(): SpawnSpec {
+  /**
+   * Two x11vnc processes per display: the **view-only** one (input gated off)
+   * serves passive watchers, the **interactive** one serves operator takeover.
+   * The WS route picks one per connection based on the session mode.
+   */
+  private specX11vnc(rfbPort: number, extraArgs: string[]): SpawnSpec {
     return {
       file: "x11vnc",
       args: [
@@ -159,7 +184,8 @@ export class SessionSupervisor implements SessionHandle {
         this.slot.display,
         "-localhost",
         "-rfbport",
-        String(this.slot.vncPort),
+        String(rfbPort),
+        ...extraArgs,
         "-nopw",
         "-forever",
         "-shared",
@@ -168,7 +194,16 @@ export class SessionSupervisor implements SessionHandle {
     };
   }
 
+  private specX11vncView(): SpawnSpec {
+    return this.specX11vnc(this.slot.vncPort, ["-viewonly"]);
+  }
+
+  private specX11vncInput(): SpawnSpec {
+    return this.specX11vnc(this.slot.vncInputPort, []);
+  }
+
   private specWebsockify(): SpawnSpec {
+    // Raw RFB-over-WS endpoint for the view-only x11vnc (compat / direct clients).
     return {
       file: "websockify",
       args: [`127.0.0.1:${this.slot.wsPort}`, `127.0.0.1:${this.slot.vncPort}`],
@@ -239,7 +274,7 @@ export class SessionSupervisor implements SessionHandle {
     }
   }
 
-  /** Boot readiness gate (Part 10.2): Xvfb → CDP /json/version → vnc/ws ports → MCP handshakes. */
+  /** Boot readiness gate (Part 10.2): Xvfb → CDP /json/version → vnc/input/ws ports → MCP handshakes. */
   private async runBootSequence(): Promise<void> {
     const deadline = this.deps.ports.now() + this.deps.config.bootTimeoutMs;
     this.spawnTree();
@@ -257,8 +292,9 @@ export class SessionSupervisor implements SessionHandle {
     await this.waitFor(
       async () => {
         const vnc = await this.deps.ports.isPortListening(this.slot.vncPort, "127.0.0.1", 500);
+        const vncInput = await this.deps.ports.isPortListening(this.slot.vncInputPort, "127.0.0.1", 500);
         const ws = await this.deps.ports.isPortListening(this.slot.wsPort, "127.0.0.1", 500);
-        return vnc && ws ? true : null;
+        return vnc && vncInput && ws ? true : null;
       },
       deadline,
       "x11vnc/websockify listening",
@@ -286,7 +322,13 @@ export class SessionSupervisor implements SessionHandle {
   private spawnTree(): void {
     const gen = ++this.generation;
     this.shuttingDown = false;
-    const alive: TreeAlive = { xvfb: true, chromium: true, x11vnc: true, websockify: true };
+    const alive: TreeAlive = {
+      xvfb: true,
+      chromium: true,
+      x11vnc: true,
+      x11vncInput: true,
+      websockify: true,
+    };
     this.treeAlive = alive;
 
     const xvfb = this.deps.spawner.spawn(this.specXvfb());
@@ -303,10 +345,18 @@ export class SessionSupervisor implements SessionHandle {
       void this.handleChromiumExit(info);
     });
 
-    const x11vnc = this.deps.spawner.spawn(this.specX11vnc());
+    // Two x11vnc processes on the same display: view-only (passive watchers)
+    // and interactive (operator takeover) — the WS route picks per connection.
+    const x11vnc = this.deps.spawner.spawn(this.specX11vncView());
     this.procs.x11vnc = x11vnc;
     x11vnc.onExit(() => {
       if (gen === this.generation) alive.x11vnc = false;
+    });
+
+    const x11vncInput = this.deps.spawner.spawn(this.specX11vncInput());
+    this.procs.x11vncInput = x11vncInput;
+    x11vncInput.onExit(() => {
+      if (gen === this.generation) alive.x11vncInput = false;
     });
 
     const websockify = this.deps.spawner.spawn(this.specWebsockify());
@@ -314,7 +364,7 @@ export class SessionSupervisor implements SessionHandle {
     websockify.onExit(() => {
       if (gen === this.generation) alive.websockify = false;
     });
-    this.event("spawn", `xvfb+chromium+x11vnc+websockify on ${this.slot.display}`);
+    this.event("spawn", `xvfb+chromium+x11vnc(view+input)+websockify on ${this.slot.display}`);
   }
 
   private async spawnChildren(deadline: number): Promise<void> {
@@ -430,7 +480,7 @@ export class SessionSupervisor implements SessionHandle {
     this.screencast = null;
   }
 
-  /** Shutdown order (Part 10.2): MCP children → Chromium → x11vnc/websockify → Xvfb. */
+  /** Shutdown order (Part 10.2): MCP children → Chromium → x11vnc (both) → websockify → Xvfb. */
   private async killTree(): Promise<void> {
     this.shuttingDown = true;
     this.generation++;
@@ -440,6 +490,7 @@ export class SessionSupervisor implements SessionHandle {
     await Promise.all(children.map((child) => child.shutdown(grace)));
     await this.killProcess(this.procs.chromium);
     await this.killProcess(this.procs.x11vnc);
+    await this.killProcess(this.procs.x11vncInput);
     await this.killProcess(this.procs.websockify);
     await this.killProcess(this.procs.xvfb);
     this.procs = {};
@@ -464,7 +515,12 @@ export class SessionSupervisor implements SessionHandle {
 
   takeover(reason: string): void {
     const result = this.apply({ type: "takeover" });
-    if (result.ok) this.event("takeover", reason);
+    if (result.ok) {
+      // Arm the auto-release timer: it counts only interactive (takeover) WS
+      // connections — passive watchers never hold operator mode.
+      this.lastTakeoverViewerAt = this.deps.ports.now();
+      this.event("takeover", reason);
+    }
   }
 
   release(reason: string): void {
@@ -472,15 +528,26 @@ export class SessionSupervisor implements SessionHandle {
     if (result.ok) this.event("release", reason);
   }
 
-  viewerOpened(): void {
-    this.viewerCount++;
-    this.lastViewerAt = this.deps.ports.now();
+  /** Passive noVNC watcher (view-only route): keeps the session alive, never flips the mode. */
+  watcherOpened(): void {
+    this.watcherCount++;
     this.noteActivity();
   }
 
-  viewerClosed(): void {
-    this.viewerCount = Math.max(0, this.viewerCount - 1);
-    this.lastViewerAt = this.deps.ports.now();
+  watcherClosed(): void {
+    this.watcherCount = Math.max(0, this.watcherCount - 1);
+  }
+
+  /** Interactive noVNC connection (takeover route): holds the operator auto-release timer. */
+  takeoverViewerOpened(): void {
+    this.takeoverViewerCount++;
+    this.lastTakeoverViewerAt = this.deps.ports.now();
+    this.noteActivity();
+  }
+
+  takeoverViewerClosed(): void {
+    this.takeoverViewerCount = Math.max(0, this.takeoverViewerCount - 1);
+    this.lastTakeoverViewerAt = this.deps.ports.now();
   }
 
   noteActivity(): void {
@@ -606,7 +673,8 @@ export class SessionSupervisor implements SessionHandle {
       title: null,
       startedAt: this.startedAt,
       lastActivityAt: this.lastActivityAt,
-      viewers: this.viewerCount,
+      viewers: this.watcherCount,
+      takeoverViewers: this.takeoverViewerCount,
       bootCount: this.bootCount,
       crashCount: this.crashCount,
       ramBytes: pid ? await this.deps.ports.processRssBytes(pid) : null,

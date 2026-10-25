@@ -7,13 +7,26 @@ owning:
 
 ```
 Xvfb :N → headed Chromium (--remote-debugging-port=922N)
-        → x11vnc (localhost:590N) → websockify (608N → 590N)
+        → x11vnc (view-only, localhost:590N)      ← passive watchers
+        → x11vnc (interactive, localhost:609N)    ← operator takeover input
+        → websockify (608N → 590N, raw WS endpoint for the view-only port)
         → npx @playwright/mcp   (--isolated --cdp-endpoint=http://127.0.0.1:922N)
         → npx chrome-devtools-mcp (--browserUrl=http://127.0.0.1:922N)
 ```
 
-Static pool mapping `display :N ↔ CDP 922N ↔ vnc 590N ↔ ws 608N`, `N ∈ 1..8`,
-mutex-allocated. Listens on `ORCHESTRATOR_PORT` (default 8940).
+Static pool mapping `display :N ↔ CDP 922N ↔ vnc 590N ↔ ws 608N ↔ vnc input 609N`,
+`N ∈ 1..8`, mutex-allocated. Listens on `ORCHESTRATOR_PORT` (default 8940).
+
+**Watching is passive, takeover is explicit.** Opening `WS /p/:project/vnc`
+never changes the session mode: while the session is in `agent` mode the WS is
+relayed to the **view-only** x11vnc (`-viewonly` — keyboard/mouse input is
+dropped and never reaches Chromium). `POST /api/sessions/:slug/mode
+{"mode":"operator"}` is the only takeover trigger; after it (and after
+reconnecting the WS, which picks the route at connect time) the WS is relayed to
+the **interactive** x11vnc and viewer input drives the browser. `{"mode":"agent"}`
+releases back to the agent. Auto-release after `IDLE_OPERATOR_MINUTES` counts
+only **interactive** (takeover) WS connections — a lingering passive watcher
+never holds `operator` mode.
 
 ## Layout
 
@@ -25,7 +38,7 @@ mutex-allocated. Listens on `ORCHESTRATOR_PORT` (default 8940).
 | `src/rpc.ts` | Newline-delimited JSON-RPC over stdio (id matching, timeouts) + `McpChild` with cached `initialize` handshake |
 | `src/spawner.ts` / `src/host.ts` | `ProcessSpawner` / `SupervisorPorts` interfaces + real implementations — **all** process/fs/network access is behind them so tests run without Xvfb/Chromium |
 | `src/server.ts` | Hono HTTP surface (facade, management, viewer routes) |
-| `src/wsproxy.ts` | WS upgrade handler: `/p/:project/vnc` (raw proxy to websockify) + `/p/:project/cast` |
+| `src/wsproxy.ts` | WS upgrade handler: `/p/:project/vnc` (RFB relay — view-only 590N in `agent` mode, interactive 609N in `operator` mode, picked at connect time) + `/p/:project/cast` |
 | `src/screencast.ts` / `src/cdp.ts` | Screencast engine (raw CDP, `Page.startScreencast` webp q60 ≤1280×720, ~5 fps token bucket, latest-frame-only fan-out) |
 | `src/artifacts.ts` | Artifact store: capture playwright `--output-dir` output, content ids, GC (14 days / 5 GB LRU) |
 | `src/profiles.ts` | Browser profiles (Phase 3): lock files (0600, one session at a time), storage-state snapshots |
@@ -49,32 +62,44 @@ mutex-allocated. Listens on `ORCHESTRATOR_PORT` (default 8940).
 `POST /api/sessions/:slug/mode` `{mode:'agent'|'operator'}`,
 `POST /api/sessions/:slug/profile` `{action:'attach'|'commit'|'detach', name}`,
 `GET /api/sessions/:slug/artifacts`, `GET /artifacts/:id`, `GET /healthz`,
-`GET /metrics`.
+`GET /metrics`. Session info carries `viewers` (passive noVNC watchers) and
+`takeoverViewers` (interactive noVNC connections) as separate counts.
 
 **Viewer** (no token — Authelia forwardAuth at the reverse proxy):
-`WS /p/:project/vnc` (RFB over WS; opening it flips the session to `operator`),
+`WS /p/:project/vnc` (RFB over WS; **passive** in `agent` mode — routed to the
+view-only x11vnc, input dropped — and interactive in `operator` mode, routed to
+the interactive x11vnc; the route is picked at connect time),
 `WS /p/:project/cast` (screencast frames: JSON header `{type:'frame',url,ts}` +
 binary WebP), `/novnc/*` (real noVNC assets from `NOVNC_PATH`, dev placeholder
-otherwise), `GET /` (minimal session picker), `GET /p/:project/vnc` (redirects
-to the preconfigured noVNC client).
+otherwise), `GET /` (minimal session picker with **Take Over**/**Release**
+buttons), `GET /p/:project/view` (fallback view page: noVNC in an iframe +
+**Take Over**/**Release** buttons that call the mode API and then reconnect the
+noVNC WS to pick up the new route — the fallback UI prompts once for
+`ORCHESTRATOR_TOKEN` and keeps it in localStorage), `GET /p/:project/vnc`
+(redirects to the preconfigured noVNC client).
 
 ## Implemented
 
 - Full session lifecycle: boot readiness gate (Xvfb → CDP `/json/version` →
-  vnc/ws ports listening → MCP `initialize` handshakes → `ready`), stuck-boot
+  vnc/input/ws ports listening → MCP `initialize` handshakes → `ready`), stuck-boot
   retry once then `error`, teardown in spec order (MCP children → Chromium
-  SIGTERM→SIGKILL after 5 s → x11vnc/websockify → Xvfb).
+  SIGTERM→SIGKILL after 5 s → both x11vncs → websockify → Xvfb).
 - Crash policy: Chromium death errors in-flight calls and auto-reboots the
   session; >3 crashes within 5 min → `error` state, boots refused until
   `DELETE` + `POST`. A dead MCP stdio child is restarted with only its
   in-flight calls failing.
-- Mode gate: `operator` entered via API or by opening the noVNC WS; facade calls
-  reject with `taken over by operator — retry after release` (`tools/call` gets a
-  clean `isError` result, other methods a JSON-RPC error). Released via API or
-  after 5 min with no viewer WS. Takeovers/releases/crashes/boots go into a
-  per-session timeline (`GET /api/sessions/:slug`).
+- Mode gate: `operator` is entered **only** via the API (`POST
+  /api/sessions/:slug/mode`) or the fallback UI's **Take Over** button — opening
+  the noVNC WS is passive and never blocks the agent (input gating is two x11vnc
+  processes per display: `-viewonly` 590N for watchers, interactive 609N for
+  takeovers). Facade calls reject with `taken over by operator — retry after
+  release` (`tools/call` gets a clean `isError` result, other methods a JSON-RPC
+  error). Released via the API / **Release** button or after 5 min with no
+  *interactive* viewer WS (passive watchers don't hold the mode).
+  Takeovers/releases/crashes/boots go into a per-session timeline
+  (`GET /api/sessions/:slug`).
 - Idle GC (30 min without tool call or WS viewer → teardown), operator idle
-  (5 min → auto-release), Chromium RSS watchdog (restart at 1.5 GB), boot queue
+  (5 min without an interactive viewer → auto-release), Chromium RSS watchdog (restart at 1.5 GB), boot queue
   (`MAX_SESSIONS`, 30 s then error), RAM floor refusal (1.5 GB free).
 - Artifact capture + content-addressed ids + on-disk index rebuild + daily GC
   (14 days and 5 GB, LRU eviction first).
@@ -114,8 +139,8 @@ to the preconfigured noVNC client).
 | `PROFILES_DIR` | `/var/lib/browser-host/profiles` | Browser profile store root |
 | `MAX_SESSIONS` | `2` | Concurrent live sessions; further boots queue then error after 30 s |
 | `POOL_SIZE` | `8` | Display/port pool (`N ∈ 1..POOL_SIZE`) |
-| `IDLE_SESSION_MINUTES` | `30` | Teardown after this long with no tool call / WS viewer |
-| `IDLE_OPERATOR_MINUTES` | `5` | Auto-release from `operator` with no viewer WS |
+| `IDLE_SESSION_MINUTES` | `30` | Teardown after this long with no tool call / WS viewer (watchers and takeover viewers both count) |
+| `IDLE_OPERATOR_MINUTES` | `5` | Auto-release from `operator` with no **interactive** (takeover) viewer WS — passive watchers don't hold the mode |
 | `BOOT_TIMEOUT_MS` | `10000` | Boot readiness budget per attempt |
 | `BOOT_QUEUE_TIMEOUT_MS` | `30000` | Queued boot wait before erroring |
 | `SHUTDOWN_GRACE_MS` | `5000` | SIGTERM → SIGKILL grace |
