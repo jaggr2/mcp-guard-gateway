@@ -31,7 +31,7 @@ export function placeholderNoVnc(): string {
 </body></html>`;
 }
 
-/** Tiny shared helper for the fallback UI: mode API calls + noVNC WS reconnect. */
+/** Shared helper for the viewer UI: mode API (Warden proxy first, direct as fallback). */
 export const VIEWER_JS = `
 <script>
   function apiToken() {
@@ -43,67 +43,112 @@ export const VIEWER_JS = `
     return t;
   }
   async function setMode(slug, mode) {
-    const token = apiToken();
-    if (!token) return null;
-    const res = await fetch('/api/sessions/' + encodeURIComponent(slug) + '/mode', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: mode }),
+    const body = JSON.stringify({ mode: mode });
+    // 1) Warden's same-origin proxy (works behind Authelia — no token needed).
+    let res = await fetch('/api/browser/sessions/' + encodeURIComponent(slug) + '/mode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body,
     });
-    const body = await res.json().catch(function () { return {}; });
-    if (!res.ok) { alert('mode change failed: ' + (body.error || res.status)); return null; }
-    return body;
+    // 2) Direct orchestrator API (LAN access without the Warden UI) — token needed.
+    if (res.status === 404) {
+      const token = apiToken();
+      if (!token) return null;
+      res = await fetch('/api/sessions/' + encodeURIComponent(slug) + '/mode', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: body,
+      });
+    }
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok) { alert('mode change failed: ' + (data.error || res.status)); return null; }
+    return data;
   }
 </script>`;
 
 /**
- * Minimal per-session view page (fallback UI — the polished Warden UI comes
- * later). Owns the noVNC connection in an iframe plus explicit **Take Over** /
- * **Release** buttons: they call `POST /api/sessions/:slug/mode` and then
- * reconnect the noVNC WS so it picks up the route for the new mode (view-only
- * x11vnc in `agent`, interactive x11vnc in `operator`).
+ * Standalone per-session viewer page (`/p/:project/view`). This page OWNS its
+ * connection lifecycle — it is intentionally plain HTML/JS with no app framework:
+ * embedded in the Warden UI (iframe, src set once) or opened full-screen, no
+ * framework state change can ever re-trigger the live connection. It connects
+ * via the noVNC RFB API with exponential-backoff auto-reconnect, and the Take
+ * Over / Release buttons flip the session mode and reconnect to pick up the
+ * mode's WS route (view-only x11vnc in agent, interactive x11vnc in operator).
  */
 export function sessionViewPage(project: string): string {
   const slug = JSON.stringify(project).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>session ${project}</title>
 <style>
-  body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-  .bar { padding: .5rem 1rem; border-bottom: 1px solid #ccc; display: flex; gap: .5rem; align-items: center; }
+  body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; background: #0d1117; color: #e6edf3; }
+  .bar { padding: .5rem 1rem; border-bottom: 1px solid #30363d; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
   .bar .spacer { flex: 1; }
-  iframe { flex: 1; border: 0; width: 100%; }
+  .bar button { padding: .35rem .9rem; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #e6edf3; cursor: pointer; }
+  .bar button:disabled { opacity: .5; cursor: default; }
+  #status { color: #9da7b3; }
+  #screen { flex: 1; overflow: hidden; background: #000; }
 </style></head>
 <body>
   <div class="bar">
     <strong>session: ${project}</strong>
     <span id="mode">mode: …</span>
+    <span id="status">connecting…</span>
     <span class="spacer"></span>
     <span>watching is passive — take over to drive the browser</span>
     <button id="takeover" onclick="takeOver()">Take Over</button>
     <button id="release" onclick="releaseSession()">Release</button>
   </div>
-  <iframe id="vnc" src="/novnc/vnc.html?path=p/${encodeURIComponent(project)}/vnc&autoconnect=1&resize=scale"></iframe>
+  <div id="screen"></div>
 ${VIEWER_JS}
-  <script>
+  <script type="module">
     const slug = ${slug};
-    const frame = document.getElementById('vnc');
-    function show(info) {
-      if (info) document.getElementById('mode').textContent = 'mode: ' + info.mode;
+    let rfb = null, retries = 0, timer = null, wantConnection = true;
+
+    function setStatus(text) { document.getElementById('status').textContent = text; }
+    function show(info) { if (info) document.getElementById('mode').textContent = 'mode: ' + info.mode; }
+
+    async function connect() {
+      clearTimeout(timer);
+      wantConnection = true;
+      setStatus(retries ? 'reconnecting (attempt ' + retries + ')…' : 'connecting…');
+      let RFB;
+      try {
+        RFB = (await import('/novnc/core/rfb.js')).default;
+      } catch (e) {
+        setStatus('noVNC client assets not available');
+        return;
+      }
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = scheme + '//' + location.host + '/p/' + encodeURIComponent(slug) + '/vnc';
+      rfb = new RFB(document.getElementById('screen'), url);
+      rfb.scaleViewport = true;
+      rfb.resizeSession = false;
+      rfb.addEventListener('connect', function () { retries = 0; setStatus('connected'); });
+      rfb.addEventListener('disconnect', function (ev) {
+        const clean = ev.detail && ev.detail.clean;
+        if (clean || !wantConnection) { setStatus('disconnected'); return; }
+        retries += 1;
+        const delay = Math.min(15000, 1000 * Math.pow(2, retries - 1));
+        setStatus('connection lost — retrying in ' + Math.round(delay / 1000) + 's…');
+        timer = setTimeout(connect, delay);
+      });
     }
-    function reconnect() {
-      // Tear down + re-establish the noVNC WS so it picks up the route for the
-      // current mode (view-only x11vnc in agent, interactive x11vnc in operator).
-      const base = frame.src.replace(/[?&]_reload=\\d+/, '');
-      frame.src = base + (base.indexOf('?') >= 0 ? '&' : '?') + '_reload=' + Date.now();
+
+    function restart() {
+      wantConnection = false;
+      if (rfb) { try { rfb.disconnect(); } catch (e) {} }
+      setTimeout(connect, 250);
     }
+
     async function takeOver() {
       show(await setMode(slug, 'operator'));
-      reconnect();
+      restart();
     }
     async function releaseSession() {
       show(await setMode(slug, 'agent'));
-      reconnect();
+      restart();
     }
+    window.takeOver = takeOver;
+    window.releaseSession = releaseSession;
+    connect();
   </script>
 </body></html>`;
 }

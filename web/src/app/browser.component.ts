@@ -106,6 +106,9 @@ function describeError(err: unknown): string {
               </div>
             </div>
             <div class="viewer-actions">
+              @if (viewerHref(); as href) {
+                <a class="btn-link" [href]="href" target="_blank" rel="noopener">Open in new tab</a>
+              }
               @if (s.mode === 'agent') {
                 <button
                   class="btn-takeover"
@@ -187,6 +190,8 @@ function describeError(err: unknown): string {
     .btn-release { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
     .hint { font-size: 0.85rem; color: #8b949e; margin: 10px 0; }
     iframe.vnc { width: 100%; height: 540px; border: 1px solid #30363d; border-radius: 8px; background: #000; display: block; }
+    .btn-link { color: #58a6ff; text-decoration: none; padding: .35rem .9rem; border: 1px solid #30363d; border-radius: 6px; }
+    .btn-link:hover { background: #21262d; }
     .viewer-off { height: 200px; display: flex; align-items: center; justify-content: center; border: 1px dashed #30363d; border-radius: 8px; color: #8b949e; }
     .meta { margin-top: 10px; font-size: 0.8rem; }
   `,
@@ -209,6 +214,30 @@ export class BrowserComponent {
   selectedSession = computed(
     () => this.sessions().find((s) => s.project === this.selected()) ?? null,
   );
+
+  /**
+   * The live viewer is a standalone page (no app framework) embedded with its
+   * src set ONCE. The value must keep a stable identity across change-detection
+   * passes — a fresh object every 5s poll would re-assign iframe src and reload
+   * the viewer (the "connecting…" loop). Cached by key so [src] is only written
+   * when the target really changes (project/state/mode-flip nonce).
+   */
+  private viewerCache: { key: string; url: SafeResourceUrl } | null = null;
+  readonly viewerUrl = computed<SafeResourceUrl | null>(() => {
+    const s = this.selectedSession();
+    if (!s || s.state !== 'ready') return null;
+    const key = `${s.project}|${s.state}|${this.reconnectNonce()}`;
+    if (this.viewerCache?.key === key) return this.viewerCache.url;
+    const url = this.sanitizer.bypassSecurityTrustResourceUrl(
+      `/p/${encodeURIComponent(s.project)}/view?r=${this.reconnectNonce()}`,
+    );
+    this.viewerCache = { key, url };
+    return url;
+  });
+  readonly viewerHref = computed(() => {
+    const s = this.selectedSession();
+    return s ? `/p/${encodeURIComponent(s.project)}/view` : null;
+  });
 
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -249,20 +278,10 @@ export class BrowserComponent {
   }
 
   /**
-   * The raw WS route (view-only vs interactive) is chosen at connect time from
-   * the session mode, so the noVNC embed must reconnect after a mode change.
+   * Flips the session mode via Warden's proxy. The viewer's WS route is chosen
+   * at connect time from the mode, so the embed is reloaded via the nonce to
+   * reconnect on the new route (view-only in agent, interactive in operator).
    */
-  viewerUrl(): SafeResourceUrl | null {
-    const s = this.selectedSession();
-    if (!s || s.state !== 'ready') return null;
-    // Same-origin URL built from encodeURIComponent(project) + a numeric nonce;
-    // Angular still requires an explicit trust for iframe src (NG0904).
-    return this.sanitizer.bypassSecurityTrustResourceUrl(
-      `/novnc/vnc.html?autoconnect=true&resize=scale&path=p/${encodeURIComponent(s.project)}/vnc` +
-        `&r=${this.reconnectNonce()}`
-    );
-  }
-
   async setMode(mode: BrowserSessionMode) {
     const s = this.selectedSession();
     if (!s || this.busy() || s.state !== 'ready') return;

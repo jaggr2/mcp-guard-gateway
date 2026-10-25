@@ -61,6 +61,18 @@ export interface UpgradeDeps {
   connectRfb?: RfbConnector;
 }
 
+/**
+ * WS protocol ping every 30s. The viewer WS rides a Cloudflare tunnel, whose
+ * proxy kills sockets idle for ~100s — and on a quiet screen the RFB stream can
+ * go minutes without a frame. Returns a cancel fn.
+ */
+export function keepAlive(ws: WebSocket, intervalMs = 30_000): () => void {
+  const timer = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) ws.ping();
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+
 function toBuffer(data: RawData): Buffer {
   if (Buffer.isBuffer(data)) return data;
   if (Array.isArray(data)) return Buffer.concat(data);
@@ -121,9 +133,11 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
     if (interactive) session.takeoverViewerOpened();
     else session.watcherOpened();
     let closed = false;
+    let stopPing: () => void = () => {};
     const closeBoth = (): void => {
       if (closed) return;
       closed = true;
+      stopPing();
       if (interactive) session.takeoverViewerClosed();
       else session.watcherClosed();
       try {
@@ -143,6 +157,7 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
     upstream.onClose(closeBoth);
     ws.on("close", closeBoth);
     ws.on("error", closeBoth);
+    stopPing = keepAlive(ws);
     // Client frames are delivered via the upgrade handler's pre-attach queue —
     // see createUpgradeHandler. (Attaching the listener here would race the
     // awaits between the WS opening and this point.)
@@ -151,9 +166,16 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
 
   function attachCast(ws: WebSocket, session: SessionHandle): void {
     const conn = viewerConn(ws);
+    const stopPing = keepAlive(ws);
     session.addCastViewer(conn);
-    ws.on("close", () => session.removeCastViewer(conn));
-    ws.on("error", () => session.removeCastViewer(conn));
+    ws.on("close", () => {
+      stopPing();
+      session.removeCastViewer(conn);
+    });
+    ws.on("error", () => {
+      stopPing();
+      session.removeCastViewer(conn);
+    });
   }
 
   return (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
