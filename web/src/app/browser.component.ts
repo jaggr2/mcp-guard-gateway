@@ -1,5 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from './api.service';
 import type { BrowserSession, BrowserSessionMode } from './models';
 
@@ -192,6 +193,7 @@ function describeError(err: unknown): string {
 })
 export class BrowserComponent {
   private api = inject(ApiService);
+  private sanitizer = inject(DomSanitizer);
   private destroyRef = inject(DestroyRef);
 
   sessions = signal<BrowserSession[]>([]);
@@ -250,12 +252,14 @@ export class BrowserComponent {
    * The raw WS route (view-only vs interactive) is chosen at connect time from
    * the session mode, so the noVNC embed must reconnect after a mode change.
    */
-  viewerUrl(): string | null {
+  viewerUrl(): SafeResourceUrl | null {
     const s = this.selectedSession();
     if (!s || s.state !== 'ready') return null;
-    return (
+    // Same-origin URL built from encodeURIComponent(project) + a numeric nonce;
+    // Angular still requires an explicit trust for iframe src (NG0904).
+    return this.sanitizer.bypassSecurityTrustResourceUrl(
       `/novnc/vnc.html?autoconnect=true&resize=scale&path=p/${encodeURIComponent(s.project)}/vnc` +
-      `&r=${this.reconnectNonce()}`
+        `&r=${this.reconnectNonce()}`
     );
   }
 
