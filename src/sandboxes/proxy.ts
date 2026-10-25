@@ -86,7 +86,7 @@ export function renderWardenInitJs(project: ProjectRow): string {
       label.textContent = "🛡️ " + slug;
       label.style.fontWeight = "600";
       var link = document.createElement("a");
-      link.href = "/picker";
+      link.href = "https://oc.jaggi.xyz/picker";
       link.textContent = "Switch Project";
       link.style.cssText = "color:#58a6ff;text-decoration:none";
       pill.appendChild(label);

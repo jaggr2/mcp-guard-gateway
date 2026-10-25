@@ -33,6 +33,34 @@ export interface AppRuntime {
 
 const WEB_ROOT = join(process.cwd(), "web", "dist", "web", "browser");
 
+/** True when the browser already carries an OpenCode web-session cookie (any port variant). */
+function hasOpenCodeSession(cookieHeader: string | undefined): boolean {
+  return /(?:^|;\s*)opencode_session/.test(cookieHeader ?? "");
+}
+
+/**
+ * Mints a one-time pair code from a project's OpenCode API (Basic auth with the
+ * `OPENCODE_SERVER_PASSWORD` that sandbox-ctl syncs into `sandbox.<slug>.uiPassword`).
+ * Returns null when the upstream is unconfigured or unreachable.
+ */
+async function mintPairCode(configStore: ConfigStore, slug: string): Promise<string | null> {
+  const upstream = configStore.getSetting(`sandbox.${slug}.upstreamUrl`);
+  const uiPassword = configStore.getSetting(`sandbox.${slug}.uiPassword`);
+  if (!upstream || !uiPassword) return null;
+  try {
+    const res = await fetch(`${upstream.replace(/\/$/, "")}/api/pair`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${Buffer.from(`opencode:${uiPassword}`).toString("base64")}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { code?: unknown };
+    return typeof body.code === "string" && body.code.length > 0 ? body.code : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createApp(env: Record<string, string | undefined>): Hono {
   const config = loadConfig(env);
   const db = openDatabase(config.dbPath);
@@ -99,40 +127,32 @@ export function createApp(env: Record<string, string | undefined>): Hono {
           },
         });
       if (!rest.startsWith("/auth/connect/")) {
-        const hasSession = /(?:^|;\s*)opencode_session/.test(c.req.header("cookie") ?? "");
-        if (search.get("pair") === "1" || (!rest && !hasSession)) {
-          // Mint a one-time pairing code straight from the sandbox's API (Basic auth
-          // with the OPENCODE_SERVER_PASSWORD that sandbox-ctl syncs into the gateway
-          // settings DB). No host-side exec needed — the gateway container has no incus.
-          const upstream = configStore.getSetting(`sandbox.${targetSlug}.upstreamUrl`);
-          const uiPassword = configStore.getSetting(`sandbox.${targetSlug}.uiPassword`);
-          if (upstream && uiPassword) {
-            try {
-              const pairRes = await fetch(`${upstream.replace(/\/$/, "")}/api/pair`, {
-                method: "POST",
-                headers: {
-                  Authorization: `Basic ${Buffer.from(`opencode:${uiPassword}`).toString("base64")}`,
-                },
-                signal: AbortSignal.timeout(5000),
-              });
-              if (pairRes.ok) {
-                const pairBody = (await pairRes.json()) as { code?: unknown };
-                if (typeof pairBody.code === "string" && pairBody.code.length > 0) {
-                  return sandboxRedirect(`/s/${targetSlug}/auth/connect/${pairBody.code}`);
-                }
-              }
-            } catch {
-              /* sandbox unreachable — fall through to the plain redirect (wake splash) */
-            }
+        if (search.get("pair") === "1" || (!rest && !hasOpenCodeSession(c.req.header("cookie")))) {
+          const code = await mintPairCode(configStore, targetSlug);
+          if (code) {
+            return sandboxRedirect(`/s/${targetSlug}/auth/connect/${code}`);
           }
         }
       }
       return sandboxRedirect(location);
     }
 
-    // 2. Subdomain routing (`oc-<slug>.jaggi.xyz` or `<slug>.oc.jaggi.xyz`)
-    const hostSlug = extractSandboxSlugFromHost(host);
+    // 2. Host-based routing: subdomains (`oc-<slug>.jaggi.xyz` / `<slug>.oc.jaggi.xyz`) plus
+    //    the dedicated `oc-server.jaggi.xyz` host for the host-native instance. Entry
+    //    navigations without a web session get an auto sign-in pair code, like /s/<slug>.
+    const hostSlug = host === "oc-server.jaggi.xyz" ? "oc-server" : extractSandboxSlugFromHost(host);
     if (hostSlug) {
+      const isEntry = c.req.method === "GET" && (c.req.path === "/" || c.req.path === "");
+      const forcePair = c.req.method === "GET" && new URL(c.req.url).searchParams.get("pair") === "1";
+      if (forcePair || (isEntry && !hasOpenCodeSession(c.req.header("cookie")))) {
+        const code = await mintPairCode(configStore, hostSlug);
+        if (code) {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: `/auth/connect/${code}` },
+          });
+        }
+      }
       return handleSandboxReverseProxy(c.req.raw, hostSlug, configStore, config.sandboxCtlScript);
     }
 
