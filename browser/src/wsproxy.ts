@@ -105,9 +105,19 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
     },
   });
 
-  async function attachVnc(ws: WebSocket, session: SessionHandle): Promise<void> {
+  async function attachVnc(ws: WebSocket, session: SessionHandle): Promise<(data: RawData) => void> {
     const interactive = session.mode === "operator";
     const upstream = await connectRfb(interactive ? session.vncInputPort : session.vncPort);
+    if (ws.readyState !== WebSocket.OPEN) {
+      // Client vanished during session boot / TCP connect — release the upstream
+      // immediately instead of leaking it and flushing stale frames into it.
+      try {
+        upstream.destroy();
+      } catch {
+        /* ignore */
+      }
+      return () => {};
+    }
     if (interactive) session.takeoverViewerOpened();
     else session.watcherOpened();
     let closed = false;
@@ -131,9 +141,12 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk, { binary: true });
     });
     upstream.onClose(closeBoth);
-    ws.on("message", (data) => upstream.write(toBuffer(data)));
     ws.on("close", closeBoth);
     ws.on("error", closeBoth);
+    // Client frames are delivered via the upgrade handler's pre-attach queue —
+    // see createUpgradeHandler. (Attaching the listener here would race the
+    // awaits between the WS opening and this point.)
+    return (data) => upstream.write(toBuffer(data));
   }
 
   function attachCast(ws: WebSocket, session: SessionHandle): void {
@@ -157,11 +170,25 @@ export function createUpgradeHandler(deps: UpgradeDeps) {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      // Buffer client frames from the very first moment. noVNC sends its RFB
+      // version immediately on open, and between here and attachVnc there are
+      // awaits (session boot + TCP connect) — without the queue those frames are
+      // emitted with no listener and vanish: x11vnc never sees the version and
+      // the viewer sits on a black canvas forever (2026-10-25 black-screen bug).
+      const pending: RawData[] = [];
+      let deliver: ((data: RawData) => void) | null = null;
+      ws.on("message", (data) => (deliver ? deliver(data) : pending.push(data)));
       void (async () => {
         try {
           const session = await deps.registry.ensure(project);
-          if (kind === "vnc") await attachVnc(ws, session);
-          else attachCast(ws, session);
+          if (kind === "vnc") {
+            deliver = await attachVnc(ws, session);
+            for (const data of pending.splice(0)) deliver(data);
+          } else {
+            attachCast(ws, session);
+            deliver = () => {};
+            pending.length = 0;
+          }
         } catch (err) {
           deps.log.warn("viewer ws rejected", { project, kind, err: String(err) });
           try {

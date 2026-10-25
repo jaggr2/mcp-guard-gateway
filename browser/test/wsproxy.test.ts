@@ -175,3 +175,91 @@ describe("WS /p/:project/vnc routes by session mode", () => {
     expect(rfb.written[0].toString()).toBe("input-bytes");
   });
 });
+
+describe("WS frames sent before the RFB upstream attaches are queued, not dropped", () => {
+  // Regression: noVNC sends its RFB version immediately on WS open. The upgrade
+  // handler awaits (session boot + TCP connect) before the upstream exists —
+  // frames arriving in that window used to be emitted with no listener and
+  // vanish, leaving the viewer on a black canvas (2026-10-25).
+  it("flushes a frame sent during attach to the upstream once connected", async () => {
+    const session = new FakeSession("proj", "ready", "agent");
+    const calls: number[] = [];
+    const conns: FakeRfb[] = [];
+    let release!: (conn: RfbConnection) => void;
+    const delayedConnect = (port: number): Promise<RfbConnection> => {
+      calls.push(port);
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const registry = new FakeRegistry();
+    registry.session = session;
+    const handler = createUpgradeHandler({ registry, log: nullLogger, connectRfb: delayedConnect });
+    const server: Server = createServer((_req, res) => {
+      res.statusCode = 404;
+      res.end();
+    });
+    server.on("upgrade", handler);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/p/proj/vnc`);
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+    // Immediately — before any server data — like noVNC's version frame:
+    ws.send(Buffer.from("RFB 003.008\n"));
+    await new Promise((r) => setTimeout(r, 30)); // sit in the attach window
+
+    const conn = new FakeRfb();
+    conns.push(conn);
+    release(conn);
+    await until(() => conn.written.length === 1);
+    expect(conn.written[0].toString()).toBe("RFB 003.008\n");
+
+    ws.close();
+    await new Promise<void>((resolve) => {
+      server.closeAllConnections();
+      server.close(() => resolve());
+    });
+    expect(calls).toEqual([5901]);
+    expect(conns.length).toBe(1);
+  });
+
+  it("drops the queue for a client that vanishes while the session boots", async () => {
+    const session = new FakeSession("proj", "ready", "agent");
+    let release!: (conn: RfbConnection) => void;
+    const delayedConnect = (): Promise<RfbConnection> => new Promise((resolve) => (release = resolve));
+    const registry = new FakeRegistry();
+    registry.session = session;
+    const handler = createUpgradeHandler({ registry, log: nullLogger, connectRfb: delayedConnect });
+    const server: Server = createServer((_req, res) => {
+      res.statusCode = 404;
+      res.end();
+    });
+    server.on("upgrade", handler);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/p/proj/vnc`);
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+    ws.send(Buffer.from("early"));
+    ws.close();
+    await new Promise((r) => setTimeout(r, 30));
+
+    const conn = new FakeRfb();
+    release(conn);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(conn.written.length).toBe(0); // nothing forwarded after the client is gone
+    expect(conn.destroyed).toBe(true); // and the upstream is released, not leaked
+
+    await new Promise<void>((resolve) => {
+      server.closeAllConnections();
+      server.close(() => resolve());
+    });
+  });
+});
