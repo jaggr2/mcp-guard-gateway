@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import {
@@ -8,8 +11,9 @@ import {
   sanitizeInboundToolResult,
   scanOutboundSecrets,
 } from "../src/guards/security";
+import { composeAppendBlock } from "../src/memory/learning";
 import { callGatewayTool } from "../src/tools/gateway";
-import { makeDeps, trustedEnv } from "./helpers";
+import { makeDeps, testConfig, trustedEnv } from "./helpers";
 
 describe("Warden MCP Security Fortress Guards", () => {
   it("enforces per-project upstream ACLs", () => {
@@ -131,6 +135,38 @@ describe("warden_propose_learning (learn-skill)", () => {
       content: "Key is AKIAIOSFODNN7EXAMPLE",
     });
     expect(badRes.isError).toBe(true);
+  });
+
+  it("composes append blocks without repeating the title heading", () => {
+    // `append` emits `## <title>` itself; content that repeats it must not
+    // produce a doubled heading (regression: memories/homelab-incus.md, 2026-10-25).
+    expect(composeAppendBlock("My Lesson", "## My Lesson\n\n- detail\n")).toBe("\n\n## My Lesson\n- detail\n");
+    expect(composeAppendBlock("My Lesson", "# My Lesson\nbody")).toBe("\n\n## My Lesson\nbody\n");
+    // case/whitespace-insensitive match on the heading text
+    expect(composeAppendBlock("My Lesson", "##  my lesson \nbody")).toBe("\n\n## My Lesson\nbody\n");
+    // unrelated leading headings and plain content pass through untouched
+    expect(composeAppendBlock("My Lesson", "## Something Else\nbody")).toBe(
+      "\n\n## My Lesson\n## Something Else\nbody\n"
+    );
+    expect(composeAppendBlock("My Lesson", "plain body")).toBe("\n\n## My Lesson\nplain body\n");
+  });
+
+  it("writes a single heading when a learning repeats its title in the content", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "warden-memory-"));
+    mkdirSync(join(dir, "memories"), { recursive: true });
+    writeFileSync(join(dir, "memories", "lesson.md"), "# File\n\n## Existing\nbody\n", "utf8");
+    const deps = makeDeps({ callerId: "rsearch" }, testConfig({ agentMemoryDir: dir }));
+
+    const res = await callGatewayTool(deps, "warden_propose_learning", {
+      kind: "memory",
+      target_path: "memories/lesson.md",
+      title: "New Lesson",
+      content: "## New Lesson\n\n- detail",
+    });
+    expect(res.isError).toBeFalsy();
+    const written = readFileSync(join(dir, "memories", "lesson.md"), "utf8");
+    expect(written.match(/## New Lesson/g)).toHaveLength(1);
+    expect(written).toContain("## Existing");
   });
 });
 
