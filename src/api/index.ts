@@ -12,6 +12,18 @@ import {
 } from "../store/config";
 import { SecretBox } from "../secrets";
 import { authenticateAdmin, isAdmin, isOperator, type AuthContext } from "../auth/middleware";
+import { isTrustedPeer, normalizeAddr } from "../auth/peer";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import type { Context } from "hono";
+
+/** Resolves the request's TCP peer; empty when no socket info is available. */
+function requestPeer(c: Context): string {
+  try {
+    return normalizeAddr(getConnInfo(c).remote.address ?? "");
+  } catch {
+    return "";
+  }
+}
 import { snapshotToHash, type TrustSnapshot } from "../trust/pin";
 import { processLearningProposal } from "../memory/learning";
 import { runSandboxCtl } from "../sandboxes/proxy";
@@ -21,10 +33,18 @@ type App = Hono<AppEnv>;
 
 function requireAuth(
   config: GatewayConfig,
-  check: (ctx: AuthContext, config: GatewayConfig) => boolean
+  configStore: ConfigStore,
+  check: (ctx: AuthContext, config: GatewayConfig) => boolean,
+  opts: { allowTrustedPeer?: boolean } = {}
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    const ctx = authenticateAdmin(c.req.raw, config);
+    const peer = requestPeer(c);
+    let ctx = authenticateAdmin(c.req.raw, config, configStore, peer);
+    if (!ctx && opts.allowTrustedPeer && isTrustedPeer(peer, config.trustedIdentityPeers)) {
+      // Trusted local callers (host scripts) need no identity headers for
+      // read-only endpoints.
+      ctx = { callerId: "local", groups: [] };
+    }
     if (!ctx) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -46,12 +66,14 @@ export function registerApi(
   const secrets = new SecretBox(config.masterKey);
   const api: App = new Hono();
 
-  const anyAuth = requireAuth(config, () => true);
-  const admin = requireAuth(config, isAdmin);
-  const operator = requireAuth(config, isOperator);
+  const anyAuth = requireAuth(config, configStore, () => true);
+  const admin = requireAuth(config, configStore, isAdmin);
+  const operator = requireAuth(config, configStore, isOperator);
+  // Host-local scrapes (ha-sweep.sh) may call read-only endpoints without headers.
+  const trustedOrAuth = requireAuth(config, configStore, () => true, { allowTrustedPeer: true });
 
   // Local unauthenticated summary endpoint consumed by host ha-sweep.sh (127.0.0.1)
-  api.get("/ha-summary", async (c) => {
+  api.get("/ha-summary", trustedOrAuth, async (c) => {
     const baseDeps = buildDeps(config, db, "system", [], notifier);
     const globalUsage = configStore.getGlobalUsageSummary();
     const pendingRows = await baseDeps.store.listApprovals("pending");
@@ -104,8 +126,10 @@ export function registerApi(
     });
   });
 
-  // Home Assistant button / actionable notification callback for HITL approvals
-  api.post("/approvals/latest-decision", async (c) => {
+  // Home Assistant button / actionable notification callback for HITL approvals.
+  // Auth: operator identity (trusted-ingress forward-auth headers) or an
+  // operator/admin service token (ha-bridge sends one).
+  api.post("/approvals/latest-decision", operator, async (c) => {
     const body = (await c.req.json().catch(() => null)) as {
       decision?: "approved" | "denied" | "approve" | "deny";
       approvalId?: string;

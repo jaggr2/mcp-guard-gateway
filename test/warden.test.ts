@@ -9,7 +9,7 @@ import {
   scanOutboundSecrets,
 } from "../src/guards/security";
 import { callGatewayTool } from "../src/tools/gateway";
-import { makeDeps } from "./helpers";
+import { makeDeps, trustedEnv } from "./helpers";
 
 describe("Warden MCP Security Fortress Guards", () => {
   it("enforces per-project upstream ACLs", () => {
@@ -143,20 +143,24 @@ describe("Warden App Routes (/llm, /aws-creds, /git-creds, *.oc.jaggi.xyz, /api/
     });
 
     // 1. Provision a sandbox via Admin API
-    const provRes = await app.request("https://warden.jaggi.xyz/api/sandboxes", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Remote-Email": "roger@jaggi.xyz",
-        "Remote-Groups": "admins",
+    const provRes = await app.request(
+      "https://warden.jaggi.xyz/api/sandboxes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Remote-Email": "roger@jaggi.xyz",
+          "Remote-Groups": "admins",
+        },
+        body: JSON.stringify({
+          slug: "test-proj",
+          displayName: "Test Project",
+          template: "fullstack",
+          dailyBudgetUsd: 0.0001,
+        }),
       },
-      body: JSON.stringify({
-        slug: "test-proj",
-        displayName: "Test Project",
-        template: "fullstack",
-        dailyBudgetUsd: 0.0001,
-      }),
-    });
+      trustedEnv()
+    );
     expect(provRes.status).toBe(200);
     const provBody = (await provRes.json()) as { sandboxToken: string };
     expect(provBody.sandboxToken).toMatch(/^oc_test-proj_/);
@@ -184,16 +188,25 @@ describe("Warden App Routes (/llm, /aws-creds, /git-creds, *.oc.jaggi.xyz, /api/
     const pendingJson = (await awsDeployPending.json()) as { approval_id: string };
     expect(pendingJson.approval_id).toMatch(/^apr_/);
 
-    // Approve via Home Assistant latest-decision endpoint
-    const approveRes = await app.request("https://warden.jaggi.xyz/api/approvals/latest-decision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: `WARDEN_APPROVE_${pendingJson.approval_id}` }),
-    });
+    // Approve via Home Assistant latest-decision endpoint (operator identity
+    // from the trusted ingress, like the HA bridge's forward-auth path)
+    const approveRes = await app.request(
+      "https://warden.jaggi.xyz/api/approvals/latest-decision",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Remote-Email": "homeassistant@jaggi.xyz",
+          "Remote-Groups": "operators",
+        },
+        body: JSON.stringify({ action: `WARDEN_APPROVE_${pendingJson.approval_id}` }),
+      },
+      trustedEnv()
+    );
     expect(approveRes.status).toBe(200);
 
     // 4. HA Summary endpoint returns sandboxes and metrics
-    const haRes = await app.request("https://warden.jaggi.xyz/api/ha-summary");
+    const haRes = await app.request("https://warden.jaggi.xyz/api/ha-summary", undefined, trustedEnv());
     expect(haRes.status).toBe(200);
     const haJson = (await haRes.json()) as { online: boolean; sandboxes: { slug: string }[] };
     expect(haJson.online).toBe(true);

@@ -29,6 +29,12 @@ export interface GatewayConfig {
   groupsHeader: string;
   adminGroups: string[];
   operatorGroups: string[];
+  /**
+   * TCP peers (exact IPs or IPv4 CIDRs) whose forward-auth identity headers are
+   * trusted — normally just the reverse proxy. Identity headers from any other
+   * peer are spoofable and ignored.
+   */
+  trustedIdentityPeers: string[];
   /** Optional bootstrap upstream seeded into the DB on first boot. */
   bootstrapUpstream: { namespace: string; url: string } | null;
   /** Seed data applied once on first boot (from SEED_UPSTREAMS/SEED_SECRETS/SEED_POLICIES). */
@@ -72,6 +78,7 @@ const DEFAULTS = {
   HASS_NOTIFY_SERVICE: "notify",
   SANDBOX_CTL_SCRIPT: "/opt/homelab/x64-rack-server/scripts/sandbox-ctl.py",
   BROWSER_ORCHESTRATOR_URL: "http://browser-host:8940",
+  TRUSTED_IDENTITY_PEERS: "127.0.0.0/8,::1",
   CALLER_ID_HEADER: "Remote-Email",
   GROUPS_HEADER: "Remote-Groups",
   ADMIN_GROUPS: "admins",
@@ -119,6 +126,7 @@ export function loadConfig(env: Record<string, string | undefined>, protocolVers
     groupsHeader: env.GROUPS_HEADER ?? DEFAULTS.GROUPS_HEADER,
     adminGroups: splitCsv(env.ADMIN_GROUPS ?? DEFAULTS.ADMIN_GROUPS),
     operatorGroups: splitCsv(env.OPERATOR_GROUPS ?? DEFAULTS.OPERATOR_GROUPS),
+    trustedIdentityPeers: splitCsv(env.TRUSTED_IDENTITY_PEERS ?? DEFAULTS.TRUSTED_IDENTITY_PEERS),
     bootstrapUpstream,
     seedUpstreams: parseSeedUpstreams(env.SEED_UPSTREAMS),
     seedSecrets: parseJsonRecord(env.SEED_SECRETS),
