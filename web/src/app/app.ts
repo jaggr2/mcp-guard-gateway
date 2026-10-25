@@ -11,6 +11,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         <div class="brand">🛡️ Warden</div>
         <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Overview</a>
         <a routerLink="/sandboxes" routerLinkActive="active">Sandboxes</a>
+        <a routerLink="/browser" routerLinkActive="active">Browser Sessions</a>
         <a routerLink="/memory" routerLinkActive="active">Memory & Cron</a>
         <a routerLink="/upstreams" routerLinkActive="active">MCP Upstreams</a>
         <a routerLink="/approvals" routerLinkActive="active">HITL Approvals</a>

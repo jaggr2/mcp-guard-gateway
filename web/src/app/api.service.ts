@@ -4,6 +4,8 @@ import { lastValueFrom } from 'rxjs';
 import type {
   Approval,
   AuditRow,
+  BrowserSession,
+  BrowserSessionMode,
   ClientRow,
   LearningEntry,
   SandboxEntry,
@@ -67,6 +69,19 @@ export class ApiService {
 
   deleteSandbox(slug: string) {
     return this.request<{ ok: boolean }>('DELETE', `/sandboxes/${slug}`);
+  }
+
+  // Browser sessions (Browser Broker) ----------------------------------------
+  listBrowserSessions() {
+    return this.request<{ sessions: BrowserSession[] }>('GET', '/browser/sessions');
+  }
+
+  setBrowserSessionMode(project: string, mode: BrowserSessionMode) {
+    return this.request<BrowserSession>(
+      'POST',
+      `/browser/sessions/${encodeURIComponent(project)}/mode`,
+      { mode },
+    );
   }
 
   // Central Memory (`jaggr2/agent-memory`) & Cron Schedules -------------------

@@ -135,3 +135,28 @@ export interface StatusInfo {
     mcpCallsToday: number;
   };
 }
+
+// Browser Broker (agent-driven Chromium sessions) ----------------------------
+export type BrowserSessionState = 'stopped' | 'booting' | 'ready' | 'error';
+export type BrowserSessionMode = 'agent' | 'operator';
+
+export interface BrowserSession {
+  project: string;
+  state: BrowserSessionState;
+  mode: BrowserSessionMode;
+  currentUrl: string | null;
+  title: string | null;
+  /** Epoch milliseconds. */
+  startedAt: number | null;
+  /** Epoch milliseconds. */
+  lastActivityAt: number;
+  /** Passive noVNC watchers (view-only route - never flips the mode). */
+  viewers: number;
+  /** Interactive noVNC connections (takeover route - operator input). */
+  takeoverViewers: number;
+  bootCount: number;
+  crashCount: number;
+  ramBytes: number | null;
+  artifactCount: number;
+  profile: string | null;
+}
