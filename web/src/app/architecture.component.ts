@@ -11,10 +11,12 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
  * semantic fills, mono labels, arrows behind boxes) with live state overlaid
  * per node: status dots + metric chips polled from the API every 30s.
  *
- * Verification note (agent-memory: ui-state-and-verification): a11y snapshots
- * skip SVG text — verify this page via DOM introspection (querySelectorAll +
- * getComputedStyle), and audit every SVG text fill against its shape fill for
- * WCAG contrast (ui-contrast-measurement).
+ * Geometry rules (learned from an overlap bug with 5 upstreams / 5 sandboxes):
+ * dynamic rows WRAP via chipX/chipY/sandX/sandY and are capped; the left
+ * margin (x < 290) is reserved for vertical flow routing so paths never cross
+ * boxes. Verify any geometry change with the DOM overlap audit (see
+ * agent-memory: ui-state-and-verification) — and re-run the WCAG audit for
+ * touched colors (ui-contrast-measurement).
  */
 @Component({
   selector: 'app-architecture',
@@ -49,7 +51,7 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
       }
 
       <div class="map-frame">
-        <svg viewBox="0 0 1280 880" role="img" aria-label="Warden architecture map">
+        <svg viewBox="0 0 1280 1000" role="img" aria-label="Warden architecture map">
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
               <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5" />
@@ -65,8 +67,8 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
             </marker>
           </defs>
 
-          <rect x="0" y="0" width="1280" height="880" fill="var(--bg-canvas)" />
-          <rect x="0" y="0" width="1280" height="880" fill="url(#grid)" />
+          <rect x="0" y="0" width="1280" height="1000" fill="var(--bg-canvas)" />
+          <rect x="0" y="0" width="1280" height="1000" fill="url(#grid)" />
 
           <!-- ══ flows (behind boxes) ══════════════════════════════════ -->
           <g class="flows">
@@ -75,14 +77,14 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
             <path class="flow-sec" d="M 694 112 H 742" />
             <path class="flow-sec" d="M 832 144 V 186 H 580 V 252" />
             <path class="flow" d="M 580 482 V 522" marker-end="url(#arrow)" />
-            <path class="flow" d="M 580 546 V 580" marker-end="url(#arrow)" />
+            <path class="flow" d="M 330 482 H 130 V 662 H 296" marker-end="url(#arrow)" />
+            <path class="flow" d="M 318 426 H 260 V 904 H 360" marker-end="url(#arrow)" />
             <path class="flow ok" [class.live]="mcpCalls() > 0" d="M 860 300 H 984" marker-end="url(#arrow-green)" />
             <path class="flow-sec" d="M 860 396 H 984" />
             <path class="flow" d="M 860 470 H 984" marker-end="url(#arrow)" />
-            <path class="flow warn" d="M 860 576 H 984" marker-end="url(#arrow)" />
-            <path class="flow" d="M 782 646 V 482" marker-end="url(#arrow)" />
-            <path class="flow" d="M 494 646 V 522" marker-end="url(#arrow)" />
-            <path class="flow ok" [class.live]="loaded()" d="M 1106 700 V 612" marker-end="url(#arrow-green)" />
+            <path class="flow warn" d="M 860 482 H 940 V 576 H 984" marker-end="url(#arrow)" />
+            <path class="flow" d="M 782 872 H 920 V 470 H 860" marker-end="url(#arrow)" />
+            <path class="flow ok" [class.live]="loaded()" d="M 1106 668 V 612" marker-end="url(#arrow-green)" />
           </g>
 
           <!-- ══ zone: public edge ═════════════════════════════════════ -->
@@ -112,9 +114,9 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
             </g>
           </g>
 
-          <!-- ══ zone: derog-server ════════════════════════════════════ -->
+          <!-- ══ zone: derog-server (left margin x<290 stays free for flows) ══ -->
           <g>
-            <rect class="zone" x="24" y="208" width="900" height="596" rx="12" />
+            <rect class="zone" x="24" y="208" width="900" height="756" rx="12" />
             <text class="zone-label" x="40" y="232">DEROG-SERVER — INCUS</text>
 
             <!-- Warden core -->
@@ -161,10 +163,10 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
               </g>
             </g>
 
-            <!-- MCP upstream chips (live trust) -->
-            <text class="row-label" x="300" y="516">MCP UPSTREAMS (trust-pinned)</text>
-            @for (u of upstreams(); track u.namespace) {
-              <g class="node mini" [attr.transform]="'translate(' + (300 + $index * 152) + ',522)'">
+            <!-- MCP upstream chips (live trust) — 4 per row, wrapping -->
+            <text class="row-label" x="300" y="512">MCP UPSTREAMS (TRUST-PINNED)</text>
+            @for (u of visibleUpstreams(); track u.namespace) {
+              <g class="node mini" [attr.transform]="'translate(' + chipX($index) + ',' + chipY($index) + ')'">
                 <rect width="144" height="32" rx="6" />
                 <circle class="status" [attr.class]="'status ' + trustHealth(u.trust)"
                         cx="14" cy="16" r="5" />
@@ -173,41 +175,47 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
             } @empty {
               <text class="node-sub" x="300" y="542">no upstreams registered</text>
             }
+            @if (hiddenUpstreamCount() > 0) {
+              <text class="node-sub" x="300" y="618">+{{ hiddenUpstreamCount() }} more upstreams</text>
+            }
 
-            <!-- Sandboxes (live) -->
-            @for (s of sandboxes(); track s.slug) {
-              <g class="node svc" [attr.transform]="'translate(' + (64 + $index * 244) + ',580)'">
-                <rect width="228" height="64" rx="6" />
+            <!-- Sandboxes (live) — 2 per row, wrapping -->
+            @for (s of visibleSandboxes(); track s.slug) {
+              <g class="node svc" [attr.transform]="'translate(' + sandX($index) + ',' + sandY($index) + ')'">
+                <rect width="300" height="64" rx="6" />
                 <circle class="status" [attr.class]="'status ' + sandboxHealth(s.status)"
-                        cx="206" cy="20" r="6" />
+                        cx="278" cy="20" r="6" />
                 <text class="node-name" x="16" y="26">{{ s.slug }}</text>
                 <text class="node-sub" x="16" y="46">{{ s.status }} · {{ s.lifecycleMode }}</text>
               </g>
             } @empty {
-              <text class="node-sub" x="64" y="612">no sandboxes provisioned</text>
+              <text class="node-sub" x="300" y="662">no sandboxes provisioned</text>
+            }
+            @if (hiddenSandboxCount() > 0) {
+              <text class="node-sub" x="300" y="862">+{{ hiddenSandboxCount() }} more sandboxes</text>
             }
 
             <!-- host row -->
             <g class="node ext">
-              <rect x="64" y="676" width="260" height="64" rx="6" />
-              <text class="node-name" x="80" y="702">browser-host (Incus)</text>
-              <text class="node-sub" x="80" y="722">Chromium · noVNC takeover</text>
+              <rect x="64" y="872" width="260" height="64" rx="6" />
+              <text class="node-name" x="80" y="898">browser-host (Incus)</text>
+              <text class="node-sub" x="80" y="918">Chromium · noVNC takeover</text>
             </g>
             <g class="node ext">
-              <rect x="364" y="676" width="260" height="64" rx="6" />
-              <text class="node-name" x="380" y="702">oc-server (:4097)</text>
-              <text class="node-sub" x="380" y="722">host OpenCode · /opt/homelab</text>
+              <rect x="364" y="872" width="260" height="64" rx="6" />
+              <text class="node-name" x="380" y="898">oc-server (:4097)</text>
+              <text class="node-sub" x="380" y="918">host OpenCode · /opt/homelab</text>
             </g>
             <g class="node db">
-              <rect x="664" y="676" width="236" height="64" rx="6" />
-              <text class="node-name" x="680" y="702">agent-memory</text>
-              <text class="node-sub" x="680" y="722">/var/lib/warden · git (jaggr2)</text>
+              <rect x="664" y="872" width="236" height="64" rx="6" />
+              <text class="node-name" x="680" y="898">agent-memory</text>
+              <text class="node-sub" x="680" y="918">/var/lib/warden · git (jaggr2)</text>
             </g>
           </g>
 
           <!-- ══ zone: external ════════════════════════════════════════ -->
           <g>
-            <rect class="zone" x="956" y="208" width="300" height="596" rx="12" />
+            <rect class="zone" x="956" y="208" width="300" height="756" rx="12" />
             <text class="zone-label" x="972" y="232">EXTERNAL</text>
 
             <g class="node ext">
@@ -241,16 +249,17 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
             </g>
           </g>
 
-          <!-- flow labels -->
+          <!-- flow labels (kept in free corridors) -->
           <g class="flow-labels">
-            <text x="592" y="252">/api · forward-auth</text>
+            <text x="592" y="224">/api · forward-auth</text>
             <text x="592" y="508">/mcp tool calls</text>
-            <text x="872" y="292">/llm (quota-capped)</text>
+            <text x="140" y="520">wake-on-visit (*.oc)</text>
+            <text x="120" y="700">oc-server proxy</text>
+            <text x="872" y="292">/llm (quota)</text>
             <text x="872" y="388">/aws-creds</text>
             <text x="872" y="462">/git-creds · push</text>
-            <text x="872" y="568">approve ⇄ notify</text>
-            <text x="794" y="560">learn-skill</text>
-            <text x="392" y="548">wake-on-visit (*.oc)</text>
+            <text x="872" y="508">approve ⇄ notify</text>
+            <text x="640" y="862">learn-skill ⇄ mount</text>
             <text x="1116" y="648">morning digest</text>
           </g>
         </svg>
@@ -316,7 +325,7 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
     .zone { fill: rgba(15, 23, 42, 0.35); stroke: var(--border-strong); stroke-dasharray: 8 4; }
     .zone-label { fill: var(--text-muted); font: 600 12px var(--font-mono); letter-spacing: 0.12em; }
 
-    /* nodes — double-rect: opaque base + tinted frame (skill masking trick) */
+    /* nodes */
     .node rect { fill: #0f172a; stroke-width: 1.5; }
     .node.core rect { fill: #0f172a; stroke: #34d399; stroke-width: 2; }
     .node.svc rect { stroke: #34d399; }
@@ -395,6 +404,29 @@ export class ArchitectureComponent implements OnInit, OnDestroy {
 
   readonly sandboxes = computed(() => this.info()?.sandboxes ?? []);
   readonly upstreams = computed(() => this.info()?.upstreams ?? []);
+
+  /* Dynamic rows wrap inside the server zone; anything past the caps is
+   * summarized as "+N more" so the map can never overflow its boundaries. */
+  readonly visibleUpstreams = computed(() => this.upstreams().slice(0, 8));
+  readonly hiddenUpstreamCount = computed(() => Math.max(0, this.upstreams().length - 8));
+  readonly visibleSandboxes = computed(() => this.sandboxes().slice(0, 6));
+  readonly hiddenSandboxCount = computed(() => Math.max(0, this.sandboxes().length - 6));
+
+  chipX(i: number): number {
+    return 300 + (i % 4) * 152;
+  }
+
+  chipY(i: number): number {
+    return 522 + Math.floor(i / 4) * 40;
+  }
+
+  sandX(i: number): number {
+    return 300 + (i % 2) * 312;
+  }
+
+  sandY(i: number): number {
+    return 630 + Math.floor(i / 2) * 76;
+  }
 
   readonly mcpCalls = computed(() => this.info()?.globalUsage?.mcpCallsToday ?? 0);
 
