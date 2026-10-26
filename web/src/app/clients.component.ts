@@ -9,7 +9,8 @@ import type { ClientRow } from './models';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Machine clients</h2>
+      <h2 class="page-title">Machine Clients</h2>
+      <p class="page-subtitle">Service tokens for headless callers — scope-limited, hashed at rest.</p>
       <p class="hint">
         Service tokens for MCP clients that can't do browser OAuth (e.g. opencode). The token is
         shown once; store it in the client's config.

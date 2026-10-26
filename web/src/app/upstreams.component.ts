@@ -9,7 +9,8 @@ import type { ToolEntry, Upstream } from './models';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Upstreams</h2>
+      <h2 class="page-title">MCP Upstreams</h2>
+      <p class="page-subtitle">Upstream MCP servers behind the security gateway — pinned trust baselines, per-tool guard policies and secret-backed headers.</p>
 
       <form class="row" (ngSubmit)="add()">
         <input [(ngModel)]="newName" name="newName" placeholder="namespace (e.g. nanokvm)" required />

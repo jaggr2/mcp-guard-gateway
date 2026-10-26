@@ -1,1 +1,264 @@
-/* You can add global styles to this file, and also import other style files */
+/* Warden admin UI — design tokens + base styles.
+ *
+ * Layers (per dashboard design-system practice):
+ *   primitives → semantics → components below.
+ * Dark-first: lighter surfaces read as "closer" (elevation), never shadows.
+ * Status colors come in PAIRS: `*-graphic` (3:1, shapes/dots/bars) and
+ * `*-text` (4.5:1, labels) — dark surfaces need the lifted "text" hue.
+ * Tiny text stays >= 12px. Verify contrast in a real browser (see
+ * agent-memory: ui-contrast-measurement) after touching any color.
+ */
+
+:root {
+  /* primitives — slate ramp */
+  --slate-950: #020617;
+  --slate-900: #0f172a;
+  --slate-850: #162032;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-100: #f1f5f9;
+
+  /* semantics — surfaces (lighter = closer) */
+  --bg-canvas: var(--slate-950);
+  --bg-surface: var(--slate-900);
+  --bg-elevated: var(--slate-850);
+  --bg-inset: #060c1a;
+  --border: var(--slate-800);
+  --border-strong: var(--slate-700);
+
+  /* semantics — text */
+  --text: var(--slate-100);
+  --text-muted: var(--slate-400);
+  --text-on-accent: #04101f;
+
+  /* semantics — interactive */
+  --accent: #58a6ff;
+  --accent-strong: #79c0ff;
+  --accent-bg: rgba(56, 139, 253, 0.16);
+
+  /* semantics — status (graphic >= 3:1 / text >= 4.5:1 on --bg-surface) */
+  --ok-graphic: #2ea043;
+  --ok-text: #56d364;
+  --warn-graphic: #d29922;
+  --warn-text: #e3b341;
+  --danger-graphic: #da3633;
+  --danger-text: #ff7b72;
+  --info-graphic: #388bfd;
+  --info-text: #79c0ff;
+  --neutral-graphic: var(--slate-500);
+  --neutral-text: var(--slate-400);
+
+  /* spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* radius + elevation */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  /* type scale */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 26px;
+
+  --font-sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+/* ---------- page scaffold ---------- */
+
+.page { max-width: 1200px; }
+
+.page-title {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--sp-1);
+}
+
+.page-subtitle {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  margin: 0 0 var(--sp-6);
+  max-width: 72ch;
+}
+
+.section-title {
+  font-size: var(--fs-md);
+  font-weight: 650;
+  margin: var(--sp-8) 0 var(--sp-3);
+}
+
+/* ---------- surfaces ---------- */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  margin: var(--sp-3) 0;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0;
+}
+
+.kpi {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.kpi .label {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kpi .val {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  margin-top: var(--sp-1);
+}
+
+/* ---------- tables ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--sp-3) 0;
+  font-size: var(--fs-sm);
+}
+
+th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+tr:hover td { background: var(--bg-elevated); }
+
+/* ---------- atoms ---------- */
+
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.badge.ok { color: var(--ok-text); border-color: var(--ok-graphic); }
+.badge.warn { color: var(--warn-text); border-color: var(--warn-graphic); }
+.badge.danger { color: var(--danger-text); border-color: var(--danger-graphic); }
+.badge.info { color: var(--info-text); border-color: var(--info-graphic); }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--neutral-graphic);
+  display: inline-block;
+  flex: none;
+}
+
+.dot.ok { background: var(--ok-graphic); }
+.dot.warn { background: var(--warn-graphic); }
+.dot.danger { background: var(--danger-graphic); }
+.dot.info { background: var(--info-graphic); }
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-4);
+  cursor: pointer;
+}
+
+.btn:hover { background: var(--accent-strong); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent-strong);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-ghost:hover { background: var(--accent-bg); }
+
+.btn-danger {
+  background: transparent;
+  color: var(--danger-text);
+  border: 1px solid var(--danger-graphic);
+}
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.error { color: var(--danger-text); }
+a { color: var(--accent-strong); }

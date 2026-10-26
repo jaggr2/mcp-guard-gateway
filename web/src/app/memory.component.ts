@@ -9,9 +9,11 @@ import type { LearningEntry } from './models';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Central Agent Memory (<code>jaggr2/agent-memory</code>) & Cron</h2>
-      <p class="muted">
-        Skills (<code>SKILL.md</code>) and engineering gotchas submitted via <code>/learn-skill</code> (<code>warden_propose_learning</code>), mounted read-only into all OpenCode sandboxes.
+      <h2 class="page-title">Central Memory &amp; Skills</h2>
+      <p class="page-subtitle">
+        <code>jaggr2/agent-memory</code> — skills (<code>SKILL.md</code>) and engineering gotchas submitted
+        via <code>learn-skill</code> (<code>warden_propose_learning</code>), mounted read-only into every
+        OpenCode sandbox and pushed back to GitHub.
       </p>
 
       <div class="section">

@@ -8,14 +8,15 @@ import { ApiService } from './api.service';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Settings</h2>
-      <h3>Hermes</h3>
+      <h2 class="page-title">Settings &amp; Secrets</h2>
+      <p class="page-subtitle">Notification targets and encrypted credentials for upstreams — values live server-side only.</p>
+      <h3>Notifications (Home Assistant)</h3>
       <div class="row">
-        <label>Conversation key</label>
+        <label>Notification target</label>
         <input [(ngModel)]="conversationKey" placeholder="telegram:123456789" class="grow" />
         <button (click)="saveSettings()">Save</button>
       </div>
-      <p class="hint">Where approval cards are delivered (Hermes messages_send target).</p>
+      <p class="hint">Where approval cards and alerts are delivered (stored as <code>hermes.conversationKey</code>, the HA notify target).</p>
 
       <h3>Upstream secrets</h3>
       <p class="hint">

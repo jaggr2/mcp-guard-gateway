@@ -24,10 +24,10 @@ function describeError(err: unknown): string {
   standalone: true,
   template: `
     <div class="page">
-      <h2>Browser Sessions</h2>
-      <p class="muted">
-        Live Chromium sessions driven by agents via the Browser Broker. Watching is passive: the
-        agent keeps control of the browser until you explicitly take over.
+      <h2 class="page-title">Browser Sessions</h2>
+      <p class="page-subtitle">
+        Browser Broker — live Chromium sessions driven by agents on <code>browser-host</code>. Watching is
+        passive: the agent keeps control until you explicitly take over.
       </p>
 
       @if (authError()) {

@@ -11,8 +11,8 @@ import type { SandboxEntry } from './models';
     <div class="page">
       <div class="header-row">
         <div>
-          <h2>OpenCode Project Sandboxes</h2>
-          <p class="muted">Isolated Incus sandboxes on <code>*.oc.jaggi.xyz</code> with zero stored secrets, LLM budget caps, and native LocalStack/Docker support.</p>
+          <h2 class="page-title">OpenCode Project Sandboxes</h2>
+          <p class="page-subtitle">Sandbox Orchestrator &amp; wake-on-visit proxy — isolated Incus sandboxes on <code>*.oc.jaggi.xyz</code> with zero stored secrets, per-project LLM budget caps, and native LocalStack/Docker support.</p>
         </div>
         <button class="btn-primary" (click)="showCreate.set(!showCreate())">
           {{ showCreate() ? 'Cancel' : '+ New / Import Project' }}

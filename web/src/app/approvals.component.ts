@@ -9,7 +9,8 @@ import type { Approval } from './models';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Approvals</h2>
+      <h2 class="page-title">HITL Approvals</h2>
+      <p class="page-subtitle">Human-in-the-loop gates for sensitive tool calls — approve or deny with a TTL, from this UI or the HA approval card.</p>
       <div class="row">
         <label>Status</label>
         <select [(ngModel)]="status" (ngModelChange)="reload()">

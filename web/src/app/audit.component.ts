@@ -9,7 +9,8 @@ import type { AuditRow } from './models';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2>Audit log</h2>
+      <h2 class="page-title">Audit Log</h2>
+      <p class="page-subtitle">Every MCP tool call with caller, arguments, guard decision and approver.</p>
       <div class="row">
         <input [(ngModel)]="tool" placeholder="tool filter (e.g. nanokvm_…)" />
         <button (click)="reload()">Query</button>

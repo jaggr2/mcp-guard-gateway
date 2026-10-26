@@ -9,7 +9,8 @@ import type { StatusInfo } from './models';
   imports: [RouterLink],
   template: `
     <div class="page">
-      <h2>Warden · AI Control Plane Overview</h2>
+      <h2 class="page-title">Warden · AI Control Plane</h2>
+      <p class="page-subtitle">Cost &amp; quota telemetry, sandbox fleet and MCP trust at a glance — live from the control plane.</p>
       @if (authError()) {
         <p class="error">Authentication required — this UI is behind Authelia forward-auth.</p>
       }

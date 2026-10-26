@@ -8,12 +8,14 @@ import { ApprovalsComponent } from './approvals.component';
 import { AuditComponent } from './audit.component';
 import { ClientsComponent } from './clients.component';
 import { SettingsComponent } from './settings.component';
+import { ArchitectureComponent } from './architecture.component';
 
 export const routes: Routes = [
   { path: '', component: DashboardComponent },
   { path: 'sandboxes', component: SandboxesComponent },
   { path: 'browser', component: BrowserComponent },
   { path: 'memory', component: MemoryComponent },
+  { path: 'architecture', component: ArchitectureComponent },
   { path: 'upstreams', component: UpstreamsComponent },
   { path: 'approvals', component: ApprovalsComponent },
   { path: 'audit', component: AuditComponent },
