@@ -104,6 +104,7 @@ export interface MemoryTreeSkill {
   name: string;
   description: string;
   files: number;
+  fileNames: string[];
   path: string;
 }
 
@@ -111,8 +112,15 @@ export interface MemoryTree {
   root: string;
   skills: MemoryTreeSkill[];
   memories: { name: string; path: string }[];
-  journal: { name: string; count: number; path: string }[];
+  journal: { name: string; count: number; files: string[]; path: string }[];
   other: string[];
+}
+
+export interface MemoryFileInfo {
+  path: string;
+  content: string;
+  size: number;
+  modifiedAt: string;
 }
 
 export interface StatusInfo {

@@ -8,6 +8,7 @@ import type {
   BrowserSessionMode,
   ClientRow,
   LearningEntry,
+  MemoryFileInfo,
   MemoryTree,
   SandboxEntry,
   StatusInfo,
@@ -102,6 +103,18 @@ export class ApiService {
 
   memoryTree() {
     return this.request<MemoryTree>('GET', '/memory/tree');
+  }
+
+  memoryFile(path: string) {
+    return this.request<MemoryFileInfo>('GET', '/memory/file?path=' + encodeURIComponent(path));
+  }
+
+  saveMemoryFile(path: string, content: string, commit: boolean) {
+    return this.request<{ path: string; commitRef: string | null }>('PUT', '/memory/file', {
+      path,
+      content,
+      commit,
+    });
   }
 
   // Upstreams -----------------------------------------------------------------

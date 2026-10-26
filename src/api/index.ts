@@ -7,6 +7,7 @@ import type { GatewayConfig } from "../config";
 import type { HermesBridge } from "../hermes/bridge";
 import { NoopHermesBridge } from "../hermes/bridge";
 import { buildDeps } from "../mcp";
+import { readMemoryFile, writeMemoryFile } from "../memory/files";
 import {
   ConfigStore,
   type LifecycleMode,
@@ -428,7 +429,13 @@ export function registerApi(
           const m = text.match(/^---[\s\S]*?description:[ \t]*(.+)/);
           if (m) description = m[1].trim().replace(/^["']|["']$/g, "").slice(0, 140);
         }
-        return { name, description, files: listNames(skillDir).length, path: `skills/${name}` };
+        return {
+          name,
+          description,
+          files: listNames(skillDir).length,
+          fileNames: listNames(skillDir).sort(),
+          path: `skills/${name}`,
+        };
       });
 
     const memories = listNames(join(dir, "memories"))
@@ -438,17 +445,43 @@ export function registerApi(
     const journal = listNames(join(dir, "journal"))
       .filter((name) => isDir(join(dir, "journal", name)))
       .sort()
-      .map((name) => ({
-        name,
-        count: listNames(join(dir, "journal", name)).length,
-        path: `journal/${name}`,
-      }));
+      .map((name) => {
+        const files = listNames(join(dir, "journal", name)).sort();
+        return { name, count: files.length, files, path: `journal/${name}` };
+      });
 
     const other = listNames(dir)
       .filter((name) => !isDir(join(dir, name)))
       .sort();
 
     return c.json({ root: dir, skills, memories, journal, other });
+  });
+
+  // Memory file detail (view + manual edit) -----------------------------------
+  api.get("/memory/file", anyAuth, (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const res = readMemoryFile(dir, c.req.query("path") ?? "");
+    return c.json(res, "error" in res ? 404 : 200);
+  });
+
+  api.put("/memory/file", operator, async (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const body = (await c.req.json().catch(() => null)) as {
+      path?: string;
+      content?: string;
+      commit?: boolean;
+    } | null;
+    if (!body || typeof body.path !== "string" || typeof body.content !== "string") {
+      return c.json({ error: "path and content are required" }, 400);
+    }
+    const res = writeMemoryFile(dir, body.path, body.content, body.commit !== false);
+    return c.json(res, "error" in res ? 400 : 200);
   });
 
   // upstreams -----------------------------------------------------------------

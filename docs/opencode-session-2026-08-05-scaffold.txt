@@ -1,0 +1,3243 @@
+Title: OpenCode
+URL: https://opncd.ai
+Source element: <body>
+---
+vlocal
+DeepSeek V4 Flash
+05 Aug 2026, 19:33
+Starting implementation
+start implementation
+Build · deepseek-v4-flash
+ · 
+7:33 PM
+
+The user says "start implementation". This is a very vague request. I need to understand the context - what project is this? Let me look at the working directory to understand what's going on. Let me explore the codebase first.
+
+The working directory is C:\Users\roger\dev\mcp-guard-gateway. Let me check what's there, including any README, TODO, or plan documents.
+
+Shell
+Shell
+git log --oneline -10; echo "---STATUS---"; git status; echo "---BRANCH---"; git branch --show-current
+Shell
+Shell
+Get-ChildItem -Force | Select-Object Mode, LastWriteTime, Length, Name
+
+Let me look at the docs and README to understand the implementation plan.
+
+Shell
+Shell
+Get-ChildItem -Recurse docs, examples | Select-Object FullName, Length
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Now I understand the project. The user wants me to start implementation. Let me also read the policy example and AWS alternative doc quickly to understand the full context.
+
+The plan is:
+
+Phase 1: Scaffold Worker project
+Phase 2: Provider-agnostic core modules
+Phase 3: Guard 1
+Phase 4: Guard 2
+Phase 5: Upstream proxy
+Phase 6: Cloudflare deploy
+Phase 7: Telegram bot setup
+Phase 8: E2E test matrix
+Phase 9: Docs + handoff
+
+Since the user said "start implementation", I should begin with Phase 1 (scaffold) and work through the code phases. Phases 6-8 require real deployment setup (wrangler d1 create, secrets, etc.) which involves the user's account, so I should implement the code for phases 1-5 first.
+
+Let me read the example policy file and check node/npm availability.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Now I have the full context. This is an MCP Guard Gateway project. The plan has 9 phases. The user said "start implementation".
+
+Let me set up a todo list and start implementing. The user likely wants me to implement the code phases (1-5) since phases 6-8 require deployment credentials and real infrastructure. Let me start with Phase 1 and work through the code.
+
+Let me plan the implementation:
+
+Phase 1 — Scaffold Worker project
+
+npm init -y
+npm install @modelcontextprotocol/sdk
+npm install -D wrangler typescript vitest
+tsconfig.json, wrangler.jsonc
+Verify wrangler dev boots
+
+Phase 2 — Provider-agnostic core modules
+
+src/index.ts, mcp.ts, policy.ts, guards/reason.ts, guards/hitl.ts, store/d1.ts, store/types.ts, telegram/client.ts, telegram/webhook.ts, upstream/nanokvm.ts, config.ts
+
+Phase 3 — Guard 1 Phase 4 — Guard 2 Phase 5 — Upstream proxy
+
+Let me create a todo list and start. I'll implement the full code in the src/ directory. Let me be careful about the MCP SDK API - I need to check which version of @modelcontextprotocol/sdk and how createMcpHandler works.
+
+Let me check the current MCP SDK version and its API. Let me scaffold first.
+
+Let me start with the todos.
+
+I have full context. The repo is architecture + plan only, no source yet. I'll start implementing Phase 1–5 (scaffold + core + guards + HITL + upstream proxy); Phases 6–8 need your Cloudflare/Telegram credentials so I'll stop before deploy.
+
+SDK 1.30.0 installed. Let me check the SDK's API for the streamable HTTP server — specifically createMcpHandler (a newer API) vs the older McpServer + StreamableHTTPServerTransport. Let me check what's exported in the SDK 1.30.
+
+No ripgrep. Let me use the grep tool instead. Let me check the SDK's server exports and how createMcpHandler or the Streamable HTTP server works in 1.30.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+The SDK 1.30 has McpServer and Server. The architecture doc mentions createMcpHandler (stateless). Let me check the streamableHttp.d.ts to understand the stateless handler. Let me also check the server/index.d.ts and the middleware.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Now I understand the SDK structure. For Cloudflare Workers, I'll use WebStandardStreamableHTTPServerTransport with a raw Server (or McpServer). Actually, given the complexity of the tool interception (tools/list merging, tools/call interception, gateway-native tools), the cleanest approach for Cloudflare Workers is to handle the JSON-RPC messages directly rather than using the high-level McpServer.
+
+The architecture says "createMcpHandler (stateless) or raw SDK handler". Given we need to:
+
+Intercept tools/list to merge upstream tools + inject reason schema
+Intercept tools/call to apply guards before forwarding
+Register gateway-native tools
+
+I think the cleanest approach is to use a low-level approach: parse the JSON-RPC message, handle initialize, tools/list, tools/call, notifications/initialized, and forward to upstream. But the SDK's Server class handles protocol negotiation (initialize, ping, protocolVersion).
+
+Actually, let me think about the best design for a Cloudflare Worker that proxies an upstream MCP server while adding governance:
+
+Option A: Use the MCP SDK's Server + WebStandardStreamableHTTPServerTransport. Register tools dynamically. The issue: tools must be registered before connection. We could fetch upstream tools/list lazily during initialization. But tools/call needs to intercept. The McpServer's registerTool approach with dynamic tool registration is possible via setRequestHandler on the raw Server for custom methods, but overriding tools/list and tools/call to merge is complex.
+
+Option B: Use a lower-level approach: build our own JSON-RPC dispatch in the fetch handler. Handle:
+
+initialize → forward to upstream, get serverInfo + capabilities, return merged
+tools/list → forward to upstream, namespace tools, apply policy (inject reason schema), add gateway-native tools
+tools/call → check gateway-native tools first; for upstream tools apply guards then forward
+notifications/* → forward (initialized, cancel, progress)
+ping → respond directly
+
+This is clean and gives full control. It's what many gateways do. But it requires re-implementing some protocol handling (protocolVersion negotiation). Actually the gateway can just forward initialize to upstream and echo the negotiated version. This is simpler and robust for a proxy.
+
+Actually, there's a subtlety: MCP clients send initialize and expect the server to respond with supported protocol versions. Since we're proxying to NanoKVM which is a full MCP server, we can forward initialize to the upstream and relay its response. This works.
+
+However, there is a cleaner pattern using the SDK: the Server class handles protocol. But the proxy merging is more complex. Given the requirement to intercept and control tools/call and tools/list, Option B (raw JSON-RPC dispatch) is the most transparent and testable. The architecture mentions "raw SDK handler" as an option. Let me go with a hand-rolled JSON-RPC dispatcher. This avoids issues with the SDK's stateless mode requiring session management, and gives full control over the async handleId HITL pattern.
+
+Wait, but there's a real concern: MCP Streamable HTTP requires proper SSE handling for GET requests and JSON responses for POST. Screenshots need binary passthrough. Hand-rolling this is more work but gives control over content-type passthrough.
+
+Let me design:
+
+src/types.ts (MCP JSON-RPC types, minimal) src/config.ts — reads env + Workers Secrets src/policy.ts — load policy (from env or embedded), resolvePolicy(tool), reason schema injection src/store/types.ts — Store interface + AuditRow/ApprovalRow src/store/d1.ts — D1 implementation src/telegram/client.ts — sendMessage/editMessageReplyMarkup src/upstream/nanokvm.ts — proxy client with namespacing src/guards/reason.ts — Guard 1 src/guards/hitl.ts — Guard 2 src/mcp.ts — JSON-RPC dispatcher, tools/list merge, tools/call routing src/index.ts — fetch() router: /mcp, /tg-webhook
+
+Let me think about the upstream proxy. The gateway forwards MCP requests to NanoKVM. The NanoKVM MCP server at https://nanokvm-uttigen.jaggi.xyz/api/mcp sits behind Cloudflare Access (needs CF Access service token headers) and requires Authorization: Bearer NANOKVM_API_KEY.
+
+The proxy needs to:
+
+Forward initialize, tools/list, tools/call, notifications/initialized etc.
+Namespace tool names: nanokvm_<name>; strip prefix on forward, re-add on response.
+Preserve content types (JSON / SSE / image).
+
+Hmm, "preserve SSE" — if the upstream returns SSE streams, the gateway should proxy the stream. For MCP Streamable HTTP, the client POSTs and gets back either a JSON response (for messages) or an SSE stream. For tools/call returning an image (screenshot), NanoKVM returns the result as a base64 image in the JSON content array typically, or possibly binary. The architecture says "Preserve SSE / JSON response content-types (screenshots pass through)".
+
+For simplicity and robustness, I'll forward the response body as-is for streaming (SSE) responses but for JSON responses I need to parse to strip the tool-name prefix. Actually, for tools/call responses, the content doesn't include the tool name, so we can pass through. For tools/list responses, we need to namespace names.
+
+The tricky part: if upstream returns SSE stream for the response, and we need to modify tools/list in an SSE stream... That's complex. Many MCP servers respond to POST with direct JSON (application/json) when not using SSE. NanoKVM's MCP server - I don't know its behavior. Let me keep it pragmatic:
+
+For JSON responses: parse, transform (namespace tools in tools/list; re-namespace), return JSON.
+For SSE: pass through raw. Actually if the upstream returns SSE, the tool list merge happens during tools/list which is likely a JSON response. If the response is Content-Type: text/event-stream, we'd need to parse SSE frames to transform.
+
+Let me handle SSE parsing as well to be safe, since tools/list could come back as SSE. Actually, in MCP Streamable HTTP, tools/list POST responses are typically application/json unless the server decides to use SSE for server-initiated messages. Let me implement a response transformer that handles both JSON and SSE frames.
+
+Actually, this is getting complex. Let me keep the design clean and pragmatic:
+
+The upstream proxy function forwardRequest:
+
+Takes the JSON-RPC request body (object), method, params.
+For tools/call, strips the nanokvm_ prefix from the tool name.
+Sends to upstream with proper headers (CF Access + API key).
+Reads response.
+For tools/list, namespaces tool names in the response.
+Returns the transformed result object (not the full HTTP response) for the dispatcher to use.
+
+For tools/call with screenshots — the result content is JSON (base64 images). No transformation needed. So the dispatcher can work purely on JSON-RPC object level and always use JSON responses.
+
+But wait — SSE streaming. If a client uses GET for SSE, we need to handle that. The MCP Streamable HTTP transport: clients POST a JSON-RPC message and either get a response with application/json OR text/event-stream. Servers MUST support application/json for responses (per spec, server responds with either JSON or SSE). Actually per the spec, the server MAY respond with SSE to the initial POST (session setup), but for subsequent requests responds JSON. The client sends Accept header.
+
+Given NanoKVM server behavior unknown, and this being a gateway, the safest is to relay Content-Type of the upstream response to the client and pass the body through unchanged for streaming responses. For JSON responses, we transform.
+
+Let me implement a response handler that:
+
+Reads the full response body.
+If content-type includes text/event-stream, proxy it raw (with SSE frames potentially containing messages; but tools/list via SSE is rare). Actually to be safe, I could transform SSE frames too. But that complicates. Let me handle JSON only for transformation, and pass SSE through unchanged. The tradeoff: if NanoKVM returns tools/list as SSE, namespacing won't apply. Acceptable risk; document it. Actually NanoKVM is a simple HTTP MCP server; most return JSON.
+
+Hmm, but actually a cleaner approach: always request JSON responses. MCP clients and servers: when the client POSTs with Accept: application/json, text/event-stream, the server chooses. When the gateway forwards to upstream, we can send Accept: application/json to force JSON responses for parseable transformation. That's legitimate — the server must support JSON responses. Then the gateway responds to the real client with the transformed JSON. For the real client's own SSE GET connection, the gateway needs to keep it alive (the client opens GET SSE for server notifications). The gateway would need to hold that open — but in a stateless Worker, holding SSE open is possible within the request lifetime (Workers support streaming responses up to a time limit). The upstream NanoKVM probably doesn't push notifications, so SSE GET from client might not even be needed. Many clients (like opencode) do open the SSE GET.
+
+This is getting into deep territory. Given the async HITL pattern where the gateway never holds requests open, and NanoKVM likely being a stateless request/response MCP server, I'll:
+
+Handle POST /mcp: parse JSON-RPC, dispatch, return JSON response (with SSE content-type only if the upstream used SSE... no, I'll force JSON).
+
+Actually, let me reconsider. The client (opencode) connects via Streamable HTTP. On initialize it POSTs. The transport opens a GET SSE connection for server-initiated messages. If the gateway doesn't support SSE, the client may still work with pure request/response (the SDK's client falls back). Let me support the GET SSE endpoint minimally: return a text/event-stream response that stays open with the initial endpoint event, then keep it open (or end it). Since the gateway is stateless and NanoKVM doesn't push, the cleanest is to return the initial event and keep the connection open as a no-op stream (the SDK client tolerates this). Actually simplest: return the endpoint event and immediately... no, closing SSE triggers client reconnect loops.
+
+Let me look at how much complexity is warranted. The task: "start implementation". I should produce a working, well-structured implementation of phases 1-5. The GET SSE handling is part of Streamable HTTP support. Let me implement it properly but simply:
+
+GET /mcp?sessionId=... → return text/event-stream with initial endpoint event? No — the endpoint event is sent by the server via the session. In stateless mode, the client's GET SSE is used to receive notifications. For a stateless gateway with no notifications, we return an SSE stream that stays open (200 OK, text/event-stream, keep-alive) and ignore it. This is what Cloudflare Workers can do with a streaming response (up to the CPU/connection limits).
+
+I'll implement:
+
+POST /mcp: parse body (JSON, possibly a single message or batch), dispatch, respond JSON. Support both single-object and array body.
+GET /mcp: open SSE stream (with event: endpoint + retry), and keep alive with periodic comments. This satisfies the transport.
+
+For the dispatcher, handle methods:
+
+initialize → forward upstream, return serverInfo with our own name/version? We should return our own server info (name: mcp-guard-gateway) but capabilities from upstream. Protocol version: we should negotiate. Simplest: forward initialize to upstream, take its result, but set serverInfo.name to "mcp-guard-gateway". Keep protocolVersion from upstream. This avoids version negotiation mismatches.
+notifications/initialized → forward upstream (fire and forget).
+tools/list → forward upstream, namespace + apply policy + inject reason schema + append gateway-native tools. Also support cursor passthrough if upstream paginates (forward cursor).
+tools/call → dispatch: if gateway-native tool, handle locally. Else, apply guards then forward.
+ping → respond immediately {}.
+notifications/cancelled, notifications/progress, notifications/roots/list_changed → forward upstream fire-and-forget.
+resources/list, resources/read, prompts/list, prompts/get, completion/complete, logging/setLevel → forward upstream (pass-through tools; the gateway is tool-focused but shouldn't break other capability). Actually the architecture focuses on tools. But forwarding other methods keeps the client happy if NanoKVM advertises them. Let me forward unknown methods upstream and relay the result. This is the most robust "proxy" behavior: forward anything not handled locally, apply namespacing only where needed.
+
+Wait, but forwarding initialize means the upstream advertises its capabilities (tools only). NanoKVM likely only has tools. Fine.
+
+Hmm, but there's a problem with forwarding initialize + stateless: the MCP protocol requires the server to return its protocolVersion and the client then sends initialized. The upstream NanoKVM handles all that. By forwarding, we maintain compatibility. Good.
+
+Now, one concern: The tools/call interception with Guard 2 returns { approval_id, status: "pending" } immediately. The client's tools/call will get that as the result. Then the agent polls check_approval_status. Good — matches the async pattern.
+
+Let me now also think about the policy. Policy is loaded from examples/policy.jsonc. The Worker can't easily read files at runtime, so the policy should be embedded at build time or passed as a variable/secret. Options:
+
+Import the JSONC file directly (wrangler supports importing JSON). JSONC has comments — need to strip or use a loader. Wrangler/esbuild supports .json imports; .jsonc might not. Let me store policy as a JSON file (convert example to valid JSON) or embed as a TS module.
+
+I'll create src/policy.ts that imports the policy from a TS module src/policy.config.ts? Or better: keep policy in examples/policy.jsonc for docs but also generate/embed. Hmm. Simplest robust approach: src/config/policy.ts exports the policy object as TS, generated from the jsonc. But then two sources of truth.
+
+Alternative: read policy from an env var POLICY (JSON string) with a default fallback embedded from the example. For dev, embed the same content as the example. I'll create src/policy.ts that tries env.POLICY (JSON) and falls back to a bundled default. To keep a single source of truth, I'll make the example the canonical config and embed it as a TS const matching it. Actually, let me just import the JSONC at build. Wrangler (esbuild) supports json files. Let me convert examples/policy.jsonc → keep as jsonc (it has no comments actually - it's pure JSON already). Wait, the file examples/policy.jsonc has no comments; it's valid JSON. I can import it via esbuild if I copy it to src/ or reference it. esbuild can import .jsonc? No, only .json. But since the content is valid JSON, I can rename/duplicate as src/policy.default.json or import from examples. Actually esbuild treats .json specially. .jsonc is treated as an asset → not importable as object in Worker.
+
+Decision: create src/policy.ts that embeds the default policy as a typed const (mirroring examples/policy.jsonc), and supports override via env.POLICY (JSON string). This keeps runtime simple and policy editable. I'll note in README that examples/policy.jsonc is the canonical example and can be pasted into the POLICY secret/var. Actually, better: import the jsonc at build time using a small script? Overkill. Embed + env override is pragmatic.
+
+Hmm, wait — I could have wrangler bind it: vars: { POLICY: "..." }. But embedding a default makes wrangler dev work out of the box. Good.
+
+Now D1 store. Bindings: DB (D1). In tests, we mock the Store interface.
+
+Telegram client: sendMessage(chat_id, text, reply_markup), editMessageText(chat_id, message_id, text, reply_markup). Chat ID: where do approval cards go? A fixed operator chat id from env TG_OPERATOR_CHAT_ID. That's a secret/var. In dev, missing → skip sending (log).
+
+The tg-webhook endpoint: parse Telegram callback_query. Payload: data = approve:<approval_id> or deny:<approval_id>, message.chat.id, message.message_id, from.id, from.username. On callback: update approval status, edit card. Also handle /start and other commands? Keep minimal: handle callback_query. Respond 200 quickly with empty body (Telegram expects 200). Also verify secret token header X-Telegram-Bot-Api-Secret-Token if configured? Optional.
+
+Now let me define types and start writing. Let me also set up tsconfig, wrangler.jsonc, and package.json scripts.
+
+Let me check the types.d.ts for JSONRPCMessage and CallToolResult shapes to type things correctly.
+
+Now let me check the MCP protocol types and the web-standard transport to wire the Worker correctly.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Let me read the key type definitions I need: JSONRPCRequestSchema, CallToolResultSchema, CallToolRequestParamsSchema, and the Tool type. Let me read specific sections of types.d.ts.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+I have enough understanding of the types. I'll use @modelcontextprotocol/sdk's Server class with the WebStandardStreamableHTTPServerTransport. But wait — the Server class + registerTool requires knowing all tools upfront, and I need to intercept tools/list and tools/call for merging/guarding.
+
+Actually, let me reconsider the architecture. There are two clean approaches:
+
+Approach 1: SDK Server + McpServer with dynamic tool registration.
+
+Create McpServer. On initialize, fetch upstream tools/list, register them with handlers that apply guards then forward.
+Register gateway-native tools statically.
+The transport handles SSE/JSON negotiation.
+
+Problem: tools/list from the gateway would return registered tools. McpServer's tools/list handler lists registered tools. But the upstream tools/list may support cursor pagination; the gateway would fetch all and re-register. That's fine for NanoKVM (few tools). The tools/call handler gets called per tool with validation. This gives schema-based validation for free (reason schema required → the SDK validates input!). Actually this is elegant: if we register the tool with inputSchema including required reason, the SDK's validateToolInput rejects missing reason with -32602 automatically.
+
+But there are complications:
+
+Upstream errors: if the upstream call fails, we return an error result.
+The screenshot passthrough: base64 image content — handled fine.
+Dynamic registration requires the transport to handle tools/list; McpServer handles that.
+The check_approval_status etc. as gateway tools: register statically.
+Merging namespacing: register nanokvm_<name>.
+We lose direct control of tools/list merging for injected reason schema, but we can modify the inputSchema during registration.
+
+Hmm, but the big issue: McpServer.registerTool requires the callback at registration time. The upstream tools list is fetched async. We'd need to register tools after the transport connects and initialize happens — the callback pattern supports that via enable()/registerTool after construction. It's workable but fiddly.
+
+Approach 2: Raw JSON-RPC dispatcher (hand-rolled proxy).
+
+Parse the request, dispatch methods manually. Forward to upstream. Transform tools/list. Intercept tools/call.
+Handle GET SSE minimally.
+Use the SDK's WebStandardStreamableHTTPServerTransport? No — with raw dispatch we handle HTTP ourselves.
+
+Given the spec explicitly says "createMcpHandler (stateless) or raw SDK handler", and the requirement to intercept, I think a clean hand-rolled dispatcher that proxies JSON-RPC gives the most control and testability, and avoids SDK session-management friction in stateless Workers. It's also simpler to reason about for the async HITL pattern.
+
+However, hand-rolling SSE + transport negotiation risks protocol bugs. Let me weigh: The MCP Streamable HTTP spec for a stateless proxy — the client sends POST with JSON-RPC, expects a JSON or SSE response. If we always respond with application/json, most clients (including the TS SDK's StreamableHTTPClientTransport) accept it (it checks content-type; if application/json, reads .json(); if text/event-stream, parses SSE). Actually, the spec: for POST responses, if the response is a single message it may be JSON; the SDK client handles both. And the GET SSE stream is for server-initiated messages — the SDK client opens it lazily. For a stateless proxy with no server-initiated messages, we can open the SSE stream and keep it alive, or... The SDK client only opens the SSE GET when the server sends a session ID and it needs to receive notifications. In stateless mode (no session ID), does the client even open the GET? Let me check the SDK client behavior. Actually, for stateless servers, the client uses the POST responses directly and may not need the SSE stream.
+
+Let me check streamableHttp.d.ts in client folder to see stateless behavior.
+
+Actually, I realize I should make a decision and move forward — this is "start implementation". Let me go with Approach 2 (hand-rolled proxy) because:
+
+Full control over tools/list merging and tools/call guarding.
+Async HITL pattern is straightforward.
+Stateless — matches the spec's non-negotiable requirements.
+Easy to unit test with vitest without SDK transport complexity.
+Forwarding unknown methods upstream keeps compatibility.
+
+For SSE/JSON: I'll respond to POST with application/json (the upstream NanoKVM we control the Accept header for). For GET /mcp, I'll return a text/event-stream with keep-alive comments, closing when the connection drops. That satisfies the transport for clients that require it.
+
+Actually, hold on. Let me reconsider using the SDK's transport + Server but with a twist: instead of McpServer, use the raw Server and register a custom tools/list and tools/call request handler that does the proxying. The Server class handles initialize, ping, protocolVersion, notifications, and the transport handles HTTP/SSE/JSON negotiation correctly. We override tools/list and tools/call via setRequestHandler. For proxying, inside tools/call handler, we fetch upstream. This gives correct protocol handling for free AND full interception control. This is the best of both worlds!
+
+Let me verify: Server auto-handles initialize? Yes, _oninitialize. It responds with its own serverInfo and capabilities. For a proxy, we want our serverInfo to be the gateway, and capabilities = tools only (we register gateway tools). But the upstream may have more capabilities (resources/prompts). For NanoKVM (just tools), tools-only is fine. We can also forward initialize upstream and relay additional capabilities... but the Server class auto-responds to initialize. We could intercept initialize to forward upstream and return combined capabilities. Hmm, Server handles initialize internally; overriding would require low-level Protocol.
+
+But actually, do we need to relay upstream capabilities? NanoKVM MCP server is a tool server. The gateway exposes tools + gateway-native tools. Client initialize gets our capabilities. Fine.
+
+The concern with Server + transport: the transport in stateless mode (sessionIdGenerator: undefined) doesn't require session IDs. GET SSE handled by transport. enableJsonResponse: true to prefer JSON responses. This handles all the protocol subtleties.
+
+Now the dynamic tools question is solved by overriding tools/list and tools/call request handlers entirely via server.setRequestHandler(...). Let me verify setRequestHandler accepts arbitrary method names and returns results. From index.d.ts:
+
+setRequestHandler<T extends AnyObjectSchema>(requestSchema: T, handler: (request: SchemaOutput<T>, extra) => ServerResult | ...): void;
+
+We pass ListToolsRequestSchema and CallToolRequestSchema from SDK. The handler returns our merged/guarded results.
+
+This is clean. Let me go with this approach:
+
+src/mcp.ts: builds a Server, overrides tools/list and tools/call handlers to route through our pipeline, connects WebStandardStreamableHTTPServerTransport per request (stateless).
+Actually with the transport, we create a new transport per request? In stateless mode, each POST is independent. The typical Workers pattern:
+export default {
+  async fetch(request) {
+    const server = createServer(env);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    server.connect(transport); // but connect sets onmessage
+    return transport.handleRequest(request);
+  }
+}
+
+Hmm, the transport is stateless per request — creating a new Server+Transport per request works for stateless mode. But server.connect(transport) registers the onmessage handler. Since each request creates fresh instances, no state leaks. This is the documented stateless pattern for Workers.
+
+Wait — but for GET SSE streams, the transport keeps the stream open; the Server instance persists for the stream lifetime. That's fine.
+
+One issue: creating a new Server per request and connecting means each request re-registers. That's OK.
+
+But there's a subtlety with tools/call HITL — we don't block. Good.
+
+Let me also handle: the upstream initialize — the SDK Server responds to initialize with our serverInfo. The client then sends initialized notification and proceeds. We never talk to upstream for initialize. The upstream NanoKVM only gets called for tools/list and tools/call (and forwarded notifications). This is simpler and correct.
+
+But wait — capability negotiation: The Server with capabilities: { tools: {} } will only advertise tools. Good. But if NanoKVM also advertises prompts/resources, we drop them. Acceptable (documented scope).
+
+Now the transport handles POST → for initialize, it responds JSON; for tools/list/tools/call responses, our handlers return results and transport serializes. For SSE GET, transport holds stream.
+
+Edge: The client may POST multiple messages? No, one JSON-RPC message per POST (or batch). Transport handles batch? JSONRPCRequest schema is single. The SDK transport's handlePostRequest parses the body; supports single or array. Let me not worry.
+
+OK here's my final architecture decision:
+
+Use SDK Server (low-level) + WebStandardStreamableHTTPServerTransport stateless, enableJsonResponse: true.
+Override tools/list → fetch upstream tools (with namespacing + policy + reason schema), merge with gateway tools, return.
+Override tools/call →
+if gateway-native tool (check_approval_status, approvals_list, audit_query) → local handler.
+else → Guard 1 (validate reason, audit) → Guard 2 (hitl async) or forward.
+Forward tools/call to upstream: strip prefix, send, transform result (only tool names don't appear in results, so passthrough).
+/tg-webhook handled separately in fetch router before transport.
+initialize handled by Server.
+
+Wait, but the upstream tools/call — after forwarding, the NanoKVM result may reference... no, tool results don't contain tool names. Just content. Good.
+
+Now the transport: does WebStandardStreamableHTTPServerTransport.handleRequest handle enableJsonResponse and stateless? Yes. For the Workers pattern, sessionIdGenerator: undefined = stateless.
+
+But hold on: there might be an issue with the transport requiring the server's capabilities advertised. Server constructor options: capabilities. Set { tools: {} }.
+
+Also the transport requires MCP-Protocol-Version handling — it validates. In stateless mode with enableJsonResponse, responses include MCP-Protocol-Version header. Fine.
+
+Let me check what version the transport advertises — SUPPORTED_PROTOCOL_VERSIONS. The client sends its version; server responds with its supported version. Good.
+
+Now, let me also reconsider: The SDK's Server requires the request schemas for methods we DON'T override (e.g., if client sends resources/list and server doesn't have capability). Since we advertise only tools, client won't call resources. If it does, Server returns MethodNotFound. Good.
+
+Alright. Let me also handle notifications/initialized — Server handles. And we may want to forward notifications/cancelled/progress upstream — but upstream isn't running an active request in our stateless model (each tools/call is a fresh fetch). Not needed.
+
+Let me now write the code. First the config and types.
+
+Let me define the structure:
+
+src/
+  index.ts            // fetch router
+  config.ts           // Config interface + loadConfig(env)
+  policy.ts           // Policy type, resolvePolicy, default policy, reason schema
+  types.ts            // shared MCP/domain types (JsonRpc error helpers, Result types)
+  mcp.ts              // createServer(env) — the MCP Server + overrides
+  tools/
+    gateway.ts        // gateway-native tools: check_approval_status, approvals_list, audit_query
+  guards/
+    reason.ts
+    hitl.ts
+  store/
+    types.ts
+    d1.ts
+  telegram/
+    client.ts
+    webhook.ts
+  upstream/
+    nanokvm.ts
+  d1/ or migrations/
+    migrations/0001_init.sql
+
+Let me write files. I'll aim for correctness and clean typing.
+
+First, config.ts: env shape.
+
+Env/bindings:
+
+DB (D1Database)
+POLICY (optional JSON string override; default embedded)
+UPSTREAM_URL (default https://nanokvm-uttigen.jaggi.xyz/api/mcp)
+UPSTREAM_NAMESPACE (default "nanokvm")
+CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+NANOKVM_API_KEY
+TG_BOT_TOKEN
+TG_OPERATOR_CHAT_ID (chat id where approval cards go)
+TG_WEBHOOK_PATH (default /tg-webhook)
+
+Let me define Config as plain object with getters that read from env. Since Workers env is Record<string, any> with bindings, I'll type it.
+
+Now store/types.ts:
+
+export type Decision = 'auto-audited' | 'approved' | 'denied' | 'expired';
+export type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired';
+
+export interface AuditRow {
+  id: number;
+  ts: string;
+  caller_id: string;
+  tool: string;
+  args: string;      // JSON
+  reason: string | null;
+  decision: Decision;
+  approved_by: string | null;
+  upstream_status: string | null;
+  expires_at: string | null;
+}
+
+export interface ApprovalRow {
+  id: string;
+  tool: string;
+  args: string;
+  reason: string;
+  status: ApprovalStatus;
+  timeout_action: 'deny' | 'approve' | null;
+  ttl_minutes: number | null;
+  created_at: string;
+  expires_at: string | null;
+  result: string | null;   // JSON
+  tg_message_id: number | null;
+  tg_user_id: string | null;
+}
+
+export interface Store {
+  insertAudit(row: Omit<AuditRow, 'id' | 'ts'> & { ts?: string }): Promise<void>;
+  queryAudit(filter: { tool?: string; since?: string; caller_id?: string; limit?: number }): Promise<AuditRow[]>;
+  createApproval(row: ApprovalRow): Promise<void>;
+  getApproval(id: string): Promise<ApprovalRow | undefined>;
+  setApprovalStatus(id: string, status: ApprovalStatus, opts?: { tgUserId?: string; result?: string }): Promise<void>;
+  listApprovals(status?: ApprovalStatus): Promise<ApprovalRow[]>;
+}
+
+Now d1.ts implements using D1Database.
+
+Now policy.ts:
+
+export type Guard = 'none' | 'reason' | 'hitl';
+export interface ToolPolicy { guard: Guard; timeout_action: 'deny' | 'approve' | null; ttl_minutes: number | null; }
+export type PolicyTable = Record<string, ToolPolicy>;
+const DEFAULT_POLICY: PolicyTable = {...matching examples...};
+export function loadPolicy(envPolicy?: string): PolicyTable
+export function resolvePolicy(table: PolicyTable, tool: string): ToolPolicy // unknown → { guard: 'none', ... }
+export const REASON_SCHEMA = { type: 'string', minLength: 1, description: 'why is this action needed' };
+export function applyPolicyToTool(tool: Tool, policy: ToolPolicy): Tool  // inject required reason
+
+Now upstream/nanokvm.ts:
+
+export class NanokvmUpstream {
+  constructor(config: Config, namespace: string) {}
+  async toolsList(cursor?: string): Promise<{ tools: UpstreamTool[]; nextCursor?: string }>
+  async callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult>
+  // forward generic method
+  async request(method, params): Promise<unknown>  // generic JSON-RPC forwarding
+}
+
+Actually since the Server handles initialize locally, we only need toolsList and callTool. But let me include a generic request for completeness (e.g., future resources/prompts). Namespacing: strip nanokvm_ prefix before forwarding tool name in tools/call.
+
+The upstream call: POST JSON-RPC {jsonrpc:'2.0', id, method, params} with headers:
+
+Content-Type: application/json
+Accept: application/json, text/event-stream
+CF-Access-Client-Id, CF-Access-Client-Secret
+Authorization: Bearer NANOKVM_API_KEY
+MCP-Protocol-Version header? The upstream server may require it. Let me include MCP-Protocol-Version: 2025-11-25 (or from client). Actually the client sends its protocol version to us; we could forward it. Let me capture the protocol version from the request and pass it. Simpler: set a constant supported version. I'll forward what the client sent if available.
+
+Response handling: upstream may respond JSON or SSE. We force Accept: application/json to get JSON. Then parse. If it returns SSE anyway, parse SSE frames. Let me implement parseUpstreamResponse(response) that handles both.
+
+For tools/call result transformation: none needed except passthrough of structuredContent, content, isError.
+
+Now guards/reason.ts:
+
+export function assertReason(args, paramsSchema): void  // throw JSON-RPC error -32602 if missing
+export async function guardReason(store, ctx, tool, args, reason): Promise<void> // insert audit row decision 'auto-audited'
+
+Wait — Guard 1 for hitl tools also collects reason. Let me structure:
+
+For a tools/call on tool T with policy P:
+
+Determine reason = args.reason (strip from args before forwarding).
+If P.guard === 'reason' or 'hitl':
+if reason missing/blank → error -32602
+Always audit (decision depends):
+P.guard === 'none' → audit decision 'auto-audited'? The spec says "Unknown/unlisted tools default to { guard: 'none' }" and "guard: none → passthrough (still audited)". So every call is audited. Decision for none → 'auto-audited'. For hitl → 'pending' initially, updated on resolution. Hmm the audit decision field: auto-audited | approved | denied | expired. For hitl, audit row created at call time with decision 'pending'? But decision enum doesn't include 'pending'. Let me reconcile: For hitl, we create an approvals row (status pending) and ALSO an audit row? The spec §5.1 audit includes decision values that reflect HITL outcome. I think: for hitl tools, we still insert an audit row with decision reflecting the resolution (or 'pending' initially, updated). But audit is "immutable" per README ("recorded in an immutable audit log"). Hmm.
+
+Let me re-read: README: "every call is written to a durable audit log (D1)." ARCHITECTURE §5.1: decision: auto-audited | approved | denied | expired. So for HITL tools, the audit row's decision would be the final outcome. Since audit is append-only-ish, I'll insert the audit row when the approval resolves (approved/denied/expired) OR insert at call time with decision 'pending'... but enum has no pending.
+
+Cleanest:
+
+Guard 1 (reason) / none: insert audit immediately, decision = 'auto-audited'.
+Guard 2 (hitl): the approvals table is the operational record. The audit row gets written when the outcome is known: approved/denied/expired. To keep the audit complete and queryable, I'll insert the audit row at resolution time with the final decision. This satisfies "every call is audited" (final outcome recorded). Also I'll include expires_at.
+
+Actually, simpler and defensible: insert audit row at resolution time for hitl; at call time for non-hitl. Good.
+
+Now guards/hitl.ts:
+
+export async function startHitl(ctx, tool, args, reason, policy): Promise<{ approval_id, status }>
+  - id = crypto.randomUUID()
+  - create approval row status pending, ttl
+  - if TG_BOT_TOKEN present: send Telegram card with inline keyboard Approve/Deny, callback_data approve:<id> / deny:<id>; record tg_message_id
+  - return { approval_id: id, status: 'pending' }
+
+check_approval_status tool:
+
+export async function checkApprovalStatus(ctx, id): Promise<CallToolResult>
+  - row = getApproval(id); if !row → error tool result
+  - if pending and not expired → return { status: 'pending' } text
+  - if expired → resolve per timeout_action:
+     - 'approve' → execute upstream, update audit, return real result
+     - 'deny' → mark expired, return error result
+  - if approved → if result already present, return it; else execute upstream, store result, return
+  - if denied → return error result
+
+Concurrency: after approved, execute upstream once and store result. There's a race if two polls arrive. Use the stored result as guard — if result null and approved, execute and store. A race could double-execute. For our scope, acceptable; could use D1 setApprovalStatus with atomic update... I'll note it. Actually I can make execution idempotent-ish by checking result IS NULL in a conditional UPDATE then executing only if we were the one to claim it. Let me implement claimApproval(id) that returns true if we set result... D1 doesn't have compare-and-swap easily. I'll do: UPDATE approvals SET result = <tmp> WHERE id = ? AND result IS NULL then check changes. Hmm complex. Keep simple: execute, store. Document.
+
+Now telegram/client.ts:
+
+export class TelegramClient {
+  constructor(token, defaultChatId) {}
+  async sendApprovalCard(tool, reason, args, approvalId): Promise<number>  // returns message_id
+  async editCard(messageId, chatId, text, replyMarkup?): Promise<void>
+  private api(method, body)
+}
+
+tg-webhook: parse callback_query:
+
+data approve:<id> or deny:<id>
+Update approval status. If approved → we do NOT execute immediately (execution happens on poll). Edit card to "approved, waiting for agent poll" or show outcome. Actually spec §7.4 "On resolution, edit the Telegram card to reflect the outcome." We edit the card: for approve → "✅ approved by @user", deny → "❌ denied". Keep Approve/Deny buttons removed.
+Return 200.
+
+Now tools/gateway.ts — the three native tools with input schemas (zod) and handlers. Since we use the raw Server.setRequestHandler for tools/call and tools/list, the gateway tools are NOT registered via McpServer. Instead, in our tools/list handler we append them, and in tools/call handler we dispatch to local handlers for these names. The reason-schema injection only applies to upstream tools.
+
+Now mcp.ts — create the Server:
+
+export function createMcpServer(env): Server {
+  const config = loadConfig(env);
+  const store = new D1Store(env.DB);
+  const upstream = new NanokvmUpstream(config);
+  const server = new Server({ name: 'mcp-guard-gateway', version: '...' }, { capabilities: { tools: {} } });
+  server.setRequestHandler(ListToolsRequestSchema, async (req) => { ... });
+  server.setRequestHandler(CallToolRequestSchema, async (req) => { ... });
+  return server;
+}
+
+Wait — but setRequestHandler in the Server enforces capability via assertRequestHandlerCapability(method) — for tools/list and tools/call, we must advertise tools capability. We do. Good.
+
+Now caller_id: from the request. Where does caller identity come from? The spec: "client identity (Access sub / token id)". Behind Cloudflare Access, the Worker receives headers like Cf-Access-Authenticated-User-Email or Cf-Access-Jwt-Assertion. For service tokens, there's Cf-Access-Authenticated-User-Email? Actually for service tokens, Access adds Cf-Access-Client-Id? Hmm. Let me check: Cloudflare Access injects headers: Cf-Access-Authenticated-User-Email (user email or service token ID for service tokens? No — for service tokens it's the token's user identifier... Actually Cf-Access-Authenticated-User-Email is set for both; for service tokens it contains the token name/id?). Let me just derive caller_id from request.headers.get('Cf-Access-Authenticated-User-Email') || 'unknown'. That's a reasonable default. I'll make it configurable via a header name constant.
+
+Actually the transport's handleRequest passes the Request to message handlers via extra. The RequestHandlerExtra includes... extra.rawRequest? Let me check. In SDK, RequestHandlerExtra has rawRequest? It has extra: { ... , request: ... }? Let me check the protocol RequestHandlerExtra type. It includes rawRequest?: Request for HTTP transports I think. Let me check.
+
+Let me grep for RequestHandlerExtra definition.
+
+Also I need to double check: Server.setRequestHandler — the handler receives (request, extra). The extra contains rawRequest (for HTTP). Let me verify.
+
+Let me also double-check that the transport handles a POST body that is a single JSON-RPC message and responds appropriately, and that enableJsonResponse works.
+
+Let me look at the protocol.d.ts RequestHandlerExtra.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+The extra in RequestHandlerExtra doesn't include the raw HTTP Request directly. But I need caller_id from HTTP headers. Options:
+
+Use authInfo? That's from the transport auth middleware.
+The transport can pass authInfo via HandleRequestOptions but the fetch handler would need to construct it.
+
+Alternative: since caller_id comes from Cloudflare Access headers, and the Server doesn't expose the raw request easily... Actually, I can derive caller_id differently: the transport's handleRequest accepts options: HandleRequestOptions with authInfo. But simpler: I can set the caller_id at the HTTP layer in index.ts by wrapping, or read headers and stash into the message.
+
+Cleaner approach: The WebStandardStreamableHTTPServerTransport.handleRequest(request, { authInfo }) accepts authInfo. But building AuthInfo requires its shape. Let me instead capture caller identity at the fetch handler and pass it through.
+
+Actually, the simplest robust approach: create the Server per request (stateless) with a closure capturing caller_id, so the tools/call handler can read it from the closure. The transport per request too. In stateless Workers, per-request Server+Transport instances are the documented pattern. Let me confirm the SDK example for Workers stateless:
+
+From the transport docs example: it creates ONE transport and reuses via module scope for stateful. For stateless, we can create a new transport each request. Creating a Server per request is heavier but fine (few tools, low traffic). And it lets us inject caller_id naturally.
+
+So index.ts:
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname === config.tgWebhookPath) return handleTelegramWebhook(request, env);
+    if (url.pathname === '/mcp') return handleMcp(request, env);
+    return new Response('Not Found', { status: 404 });
+  }
+}
+
+handleMcp:
+
+async function handleMcp(request, env) {
+  const callerId = request.headers.get('Cf-Access-Authenticated-User-Email') ?? 'anonymous';
+  const config = loadConfig(env);
+  const store = new D1Store(env.DB);
+  const deps = createDeps(config, store, callerId);
+  const server = buildMcpServer(deps);
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  await server.connect(transport);
+  return transport.handleRequest(request);
+}
+
+Wait, but server.connect(transport) calls transport.start() and sets onmessage. For a fresh transport per request, this is fine. But there's a subtlety: handleRequest for POST parses the body and calls onmessage → server responds via transport.send → sends JSON response. For GET, opens SSE. The Server stays connected for SSE stream lifetime. Each request = new server. OK.
+
+One concern: creating Server + connecting per request could interfere with _requestResponseMap etc. No, per-instance state.
+
+Concern: CPU/memory — negligible.
+
+Concern: The server.connect(transport) sets transport.onmessage to a bound handler. Good.
+
+Now caller_id: pass via deps to handlers. Good — no need for raw request in extra.
+
+Now, about Server auto-handling initialize: In stateless mode with per-request server, initialize is handled by _oninitialize. The response includes protocolVersion (server's supported). Fine.
+
+Now enableJsonResponse: true — the transport returns JSON for POST responses. For GET SSE, it streams. Good.
+
+Let me now verify the Tool type shape to build tools/list results: Tool = { name, title?, description?, inputSchema, outputSchema?, annotations?, _meta? }. I have that from mcp.d.ts RegisteredTool. Good enough; I'll type manually.
+
+Also I need CallToolResult shape: { content: [...], structuredContent?, isError?, _meta? }.
+
+Now zod schemas for gateway tools: I can use z.object({ approval_id: z.string() }) etc. But the SDK 1.30 uses a zod-compat layer. For setRequestHandler, the schema is used to validate the request params. Let me check whether setRequestHandler validates params against the schema. In Protocol, setRequestHandler(schema, handler) — the schema validates the incoming request, and handler receives the parsed output. The CallToolRequestSchema is z.object({ method: literal('tools/call'), params: z.object({ name, arguments }) }). So handler receives { method, params: { name, arguments } }. Good.
+
+For gateway tool argument validation, I'll do manual validation inside the handler (simple checks), returning error results if invalid. That keeps it simple and avoids zod schema subtleties.
+
+Now, do I even need zod? Only for the two request schemas from SDK. I'll import ListToolsRequestSchema and CallToolRequestSchema from SDK. Good.
+
+Now, let me think about the tools/list handler flow:
+
+async handleListTools(req, extra) {
+  // gather upstream tools
+  let upstream = await upstream.toolsList();
+  // namespace + policy
+  const tools = upstream.tools.map(t => applyNamespace(t, 'nanokvm'));
+  // inject reason schema per policy
+  tools.forEach(t => { const p = resolvePolicy(t.name); if (p.guard !== 'none') t = injectReason(t); });
+  // append gateway tools
+  return { tools: [...tools, ...GATEWAY_TOOLS] };
+}
+
+Upstream toolsList calls upstream with Accept: application/json, method tools/list. Namespacing: for each upstream tool {name, description, inputSchema}, produce { name: 'nanokvm_'+name, ... }. But note the upstream tool names might already contain a prefix (e.g., click_mouse). Fine.
+
+Tools/call handler:
+
+async handleCallTool(req, extra) {
+  const { name, arguments: args = {} } = req.params;
+  const callerId = deps.callerId;
+  const policy = resolvePolicy(name);
+  // Gateway-native tools
+  if (GATEWAY_NAMES.includes(name)) return handleGatewayTool(deps, name, args);
+  // must be an upstream tool; strip prefix
+  if (!name.startsWith(namespace + '_')) return errorToolResult(`Unknown tool: ${name}`);
+  const upstreamName = name.slice(namespace.length + 1);
+  const reason = args.reason;
+  const cleanArgs = stripReason(args);
+  // Guard 1
+  if (policy.guard !== 'none' && !isValidReason(reason)) {
+    return jsonRpcError? -> Actually as a CallToolResult we return { content: [{type:'text', text:'...'}], isError: true }. But spec says -32602 error. Hmm.
+  }
+
+Wait — the spec says Guard 1 missing reason → "JSON-RPC error -32602 (Invalid Params) with a clear message." As a tools/call handler, we return a CallToolResult. To produce a JSON-RPC error (not a tool result), we must throw an error that the Protocol converts into a JSON-RPC error response. The SDK McpServer.createToolError creates {content, isError:true} — a tool-level error. To get a protocol-level -32602, we can throw new Error(...) — Protocol catches and returns code -32600? Let me check: Protocol's _onRequest catches errors; McpError with specific code. There's McpError class. Throwing new McpError(ErrorCode.InvalidParams, 'reason required') → JSON-RPC error code -32602. Let me verify the SDK exports McpError and ErrorCode.
+
+Let me grep.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+s
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+McpError and ErrorCode are exported from types. Let me check how the Protocol handles thrown errors to produce JSON-RPC error responses — need to confirm that throwing an McpError from a request handler results in an error response (not a tool result). Let me look at the protocol.js _onRequest handling.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+That's the client side requestStream. Let me look at the actual _onRequest server-side handler around line 398 to see how thrown errors become JSON-RPC error responses.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Confirmed: throwing an error with a code (like McpError with InvalidParams = -32602) from a request handler produces a JSON-RPC error response with that code.
+
+Now I have everything I need. Let me start writing the files.
+
+Let me define the whole file tree:
+
+src/
+  index.ts
+  config.ts
+  policy.ts
+  mcp.ts
+  types.ts
+  tools/gateway.ts
+  guards/reason.ts
+  guards/hitl.ts
+  store/types.ts
+  store/d1.ts
+  telegram/client.ts
+  telegram/webhook.ts
+  upstream/nanokvm.ts
+migrations/0001_init.sql
+wrangler.jsonc
+tsconfig.json
+vitest.config.ts
+test/ (unit tests)
+
+Let me set up package.json scripts and tsconfig first, then write modules.
+
+package.json edits:
+
+type: module
+scripts: build (tsc), dev (wrangler dev), deploy, test (vitest run), typecheck (tsc --noEmit), check (tsc --noEmit && vitest run)
+main: src/index.ts (wrangler uses main in wrangler.jsonc)
+
+tsconfig.json for a Worker + vitest. Since vitest runs in node, and Worker runs in CF. I'll use module: ESNext, moduleResolution: Bundler, target ES2022, types: ["@cloudflare/workers-types"]. Install @cloudflare/workers-types as dev dep. Vitest can run with environment 'node' but Worker code uses fetch/Response — global in node 18+. D1 binding type from workers-types.
+
+Let me also add @cloudflare/workers-types.
+
+Let me check what npm install -D @cloudflare/workers-types does. I'll install it.
+
+Now let me write. Start with config.ts.
+
+Actually, let me reconsider one thing about the upstream proxy and JSON-RPC id. When the gateway forwards tools/call to upstream, it sends its own JSON-RPC id (e.g., 1). Fine.
+
+Also, for the tools/list merging, we call upstream's tools/list. But if upstream requires MCP-Protocol-Version header on non-initialize requests... The MCP spec says subsequent requests SHOULD include the protocol version. The upstream server validates? Possibly. I'll forward the client's MCP-Protocol-Version header if present, else default to a supported version like 2025-06-18. Let me pass through the client's header via the deps (captured from the incoming request in index.ts) — I'll capture the incoming MCP-Protocol-Version header into deps.requestProtocolVersion and use it for upstream calls. That's clean.
+
+Now let me write config.ts:
+
+export interface GatewayConfig {
+  db: D1Database;
+  upstreamUrl: string;
+  namespace: string;
+  cfAccessClientId: string | null;
+  cfAccessClientSecret: string | null;
+  nanokvmApiKey: string | null;
+  tgBotToken: string | null;
+  tgOperatorChatId: string | null;
+  tgWebhookPath: string;
+  policyJson: string | null;
+  callerIdHeader: string;
+  protocolVersion: string | null;
+}
+
+const DEFAULTS = {
+  UPSTREAM_URL: 'https://nanokvm-uttigen.jaggi.xyz/api/mcp',
+  NAMESPACE: 'nanokvm',
+  TG_WEBHOOK_PATH: '/tg-webhook',
+  CALLER_ID_HEADER: 'Cf-Access-Authenticated-User-Email',
+};
+
+export function loadConfig(env, requestHeaders?): GatewayConfig {...}
+
+Hmm, protocolVersion comes from request headers. Let me have loadConfig(env: Env, protocolVersion: string | null).
+
+Env type:
+
+export interface Env {
+  DB: D1Database;
+  POLICY?: string;
+  UPSTREAM_URL?: string;
+  UPSTREAM_NAMESPACE?: string;
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+  NANOKVM_API_KEY?: string;
+  TG_BOT_TOKEN?: string;
+  TG_OPERATOR_CHAT_ID?: string;
+  TG_WEBHOOK_PATH?: string;
+  CALLER_ID_HEADER?: string;
+}
+
+Now policy.ts. Default policy mirrors examples/policy.jsonc. Also add gateway tools? No, gateway tools are always available; policy applies to upstream tools only.
+
+export type Guard = 'none' | 'reason' | 'hitl';
+export type TimeoutAction = 'deny' | 'approve';
+export interface ToolPolicy {
+  guard: Guard;
+  timeout_action: TimeoutAction | null;
+  ttl_minutes: number | null;
+}
+
+const DEFAULT_POLICY: Record<string, ToolPolicy> = {
+  nanokvm_click_mouse: { guard: 'hitl', timeout_action: 'deny', ttl_minutes: 30 },
+  nanokvm_screenshot: { guard: 'reason', timeout_action: null, ttl_minutes: null },
+  nanokvm_type_text: { guard: 'hitl', timeout_action: 'deny', ttl_minutes: 30 },
+  nanokvm_press_keys: { guard: 'hitl', timeout_action: 'deny', ttl_minutes: 30 },
+  nanokvm_move_mouse: { guard: 'reason', timeout_action: null, ttl_minutes: null },
+  nanokvm_scroll_mouse: { guard: 'reason', timeout_action: null, ttl_minutes: null },
+};
+
+const DEFAULT_TOOL_POLICY: ToolPolicy = { guard: 'none', timeout_action: null, ttl_minutes: null };
+
+export function parsePolicy(json: string): Record<string, ToolPolicy> {...validate...}
+export function loadPolicy(envJson: string | null): Record<string, ToolPolicy> {
+  return envJson ? parsePolicy(envJson) : DEFAULT_POLICY;
+}
+export function resolvePolicy(table, tool): ToolPolicy { return table[tool] ?? DEFAULT_TOOL_POLICY; }
+export function requiresReason(p): boolean { return p.guard === 'reason' || p.guard === 'hitl'; }
+export const REASON_SCHEMA = { type: 'string', minLength: 1, description: 'Why is this action needed.' } as const;
+export function injectReasonSchema(inputSchema): {...} // add required reason
+
+types.ts — domain helpers:
+
+type Tool = { name, title?, description?, inputSchema, outputSchema?, annotations? }
+type CallToolResult = { content, structuredContent?, isError?, _meta? }
+helpers textResult(text), errorResult(message), jsonResult(value) (text content with JSON string).
+class GuardError extends Error { code = -32602 } or use McpError. I'll use McpError from SDK for the -32602 error.
+
+store/types.ts and store/d1.ts.
+
+D1 queries:
+
+INSERT INTO audit (ts, caller_id, tool, args, reason, decision, approved_by, upstream_status, expires_at) VALUES (?,?,?,?,?,?,?,?,?)
+
+Use db.prepare(sql).bind(...).run().
+
+queryAudit:
+
+SELECT * FROM audit WHERE ... ORDER BY id DESC LIMIT ?
+
+approvals:
+
+INSERT INTO approvals (id, tool, args, reason, status, timeout_action, ttl_minutes, created_at, expires_at, result, tg_message_id, tg_user_id) VALUES (...)
+
+getApproval: SELECT * FROM approvals WHERE id = ?. setApprovalStatus: UPDATE approvals SET status = ?, tg_user_id = COALESCE(?, tg_user_id), result = COALESCE(?, result) WHERE id = ?. listApprovals: SELECT * FROM approvals WHERE (status = ? OR ? IS NULL) ORDER BY created_at DESC LIMIT 100.
+
+But ? IS NULL binding works in D1/SQLite? Yes, ? IS NULL works with a bound NULL. Good. Actually cleaner: build query conditionally.
+
+Migration SQL 0001_init.sql.
+
+Now upstream/nanokvm.ts:
+
+export interface UpstreamTool { name: string; title?: string; description?: string; inputSchema?: unknown; outputSchema?: unknown; annotations?: unknown; }
+
+export class NanokvmUpstream {
+  constructor(private config: GatewayConfig) {}
+  private headers(): HeadersInit {
+    const h: Record<string,string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    };
+    if (config.protocolVersion) h['MCP-Protocol-Version'] = config.protocolVersion;
+    if (config.cfAccessClientId) h['CF-Access-Client-Id'] = config.cfAccessClientId;
+    if (config.cfAccessClientSecret) h['CF-Access-Client-Secret'] = config.cfAccessClientSecret;
+    if (config.nanokvmApiKey) h['Authorization'] = `Bearer ${config.nanokvmApiKey}`;
+    return h;
+  }
+  async request(method, params): Promise<unknown> {
+    const resp = await fetch(config.upstreamUrl, { method:'POST', headers, body: JSON.stringify({jsonrpc:'2.0', id: randomId(), method, params}) });
+    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Upstream HTTP ${resp.status}: ${await resp.text()}`);
+    const ct = resp.headers.get('content-type') ?? '';
+    if (ct.includes('text/event-stream')) return parseSSE(await resp.text());
+    const json = await resp.json();
+    if (json.error) throw new McpError(json.error.code ?? ErrorCode.InternalError, json.error.message);
+    return json.result;
+  }
+  async toolsList(cursor?): Promise<{tools, nextCursor?}> {...}
+  async callTool(name, args): Promise<CallToolResult> {...}
+}
+
+parseSSE: parse data: lines, JSON.parse the last data.
+
+The upstream tools/call result may include SSE if it streams; our Accept includes event-stream so NanoKVM might stream. To keep it simple, force Accept: application/json for upstream calls (NanoKVM will respond JSON). Actually the transport spec: the server MAY respond with SSE. But most simple servers respond JSON when the client prefers JSON. Forcing Accept: application/json is safe — the server must still respond with a valid response (JSON). If it responds SSE anyway, we parse. Let me set Accept: application/json only to bias JSON, and keep parseSSE fallback. Actually the MCP spec says servers that can't do SSE must respond JSON; servers that can, respond SSE when client Accept includes it. By sending Accept: application/json, a conforming server responds JSON. Good.
+
+Now the tools/call forward: result is CallToolResult (content array etc.). We return as-is. But note: the MCP-Protocol-Version for tools/call — pass config.protocolVersion.
+
+Now, the polling execution of approved HITL also uses upstream.callTool.
+
+Now guards/reason.ts:
+
+export function extractReason(args): string | undefined
+export function stripReason(args): Record<string, unknown>
+export function assertReason(reason): void // throws McpError InvalidParams
+export async function recordAudit(store, callerId, tool, argsJson, reason, decision, opts): Promise<void>
+
+guards/hitl.ts:
+
+export async function startApproval(deps, tool, args, reason, policy): Promise<{ approval_id, status }>
+  - now = new Date().toISOString()
+  - expiresAt = policy.ttl_minutes ? new Date(Date.now()+ttl*60000).toISOString() : null
+  - id = crypto.randomUUID()
+  - await store.createApproval({...})
+  - tgMessageId = await telegram.sendApprovalCard(...) // may be null if no token
+  - if tgMessageId update row
+  - return { approval_id: id, status: 'pending' }
+
+check_approval_status handler (in mcp.ts or hitl.ts). Let me put the resolution logic in hitl.ts:
+
+export async function resolveApproval(deps, approvalId): Promise<CallToolResult>
+  - row = await store.getApproval(id)
+  - if !row → errorResult('Approval not found: '+id)
+  - if row.status === 'approved':
+      - if row.result → return parse result
+      - else execute upstream, store result, return it
+  - if row.status === 'denied' → errorResult('Denied by operator')
+  - if row.status === 'expired' → errorResult('Expired (denied by timeout)')
+  - pending: check expiry
+      - if expired: apply timeout_action
+         - approve → execute upstream, store result + audit 'approved', return result
+         - deny/null → mark 'expired', audit 'expired', return error
+      - else return { status: 'pending' } text with retry hint
+
+The pending result: return { content: [{type:'text', text: JSON.stringify({ approval_id, status: 'pending' })}] } so the agent can parse. Better: return structured content? For compatibility with all clients, text is fine. The agent reads the text. Let me return text with {approval_id, status} JSON.
+
+Actually — for the initial pending response (from tools/call on a hitl tool), the architecture says return { approval_id, status: 'pending' }. I'll return that as text JSON.
+
+telegram/client.ts:
+
+export class TelegramClient {
+  constructor(private config) {}
+  get enabled() { return !!(token && chatId) }
+  async sendApprovalCard(tool, reason, args, approvalId): Promise<number | null>
+    - build text: `⚠️ *${tool}* wants:\n${reason}\n\n\`\`\`json\n${JSON.stringify(args)}\n\`\`\``
+    - inline_keyboard: [[ {text:'Approve', callback_data:`approve:${id}`}, {text:'Deny', callback_data:`deny:${id}`} ]]
+    - POST sendMessage → message_id
+  async editCardResolved(messageId, chatId, status, tgUserId)
+    - edit text to reflect outcome, remove keyboard
+}
+
+telegram/webhook.ts:
+
+export async function handleTelegramWebhook(request, env): Promise<Response>
+  - config = loadConfig
+  - body = await request.json()
+  - update = body.callback_query
+  - if !update → return 200
+  - data = update.data; match /^(approve|deny):(.+)$/
+  - from id = update.from.id; username
+  - store.setApprovalStatus(id, action, { tgUserId })
+  - edit card
+  - if action === 'approve' → we do NOT execute now; execution happens on poll. (async pattern)
+  - return new Response('OK', {status:200})
+
+Wait — editing the card on resolution requires tg_message_id stored. Store has tg_message_id. Good.
+
+Note: The webhook needs store. env.DB.
+
+Now mcp.ts — buildServer(deps):
+
+export interface Deps {
+  config: GatewayConfig;
+  store: Store;
+  upstream: NanokvmUpstream;
+  telegram: TelegramClient;
+  callerId: string;
+}
+
+export function buildMcpServer(deps): Server {
+  const server = new Server({name:'mcp-guard-gateway', version:'0.1.0'}, {capabilities:{tools:{}}});
+  server.setRequestHandler(ListToolsRequestSchema, async (req) => {
+    const res = await deps.upstream.toolsList();
+    const tools = res.tools.map(t => namespaceTool(t, config.namespace));
+    for (const t of tools) {
+      const p = resolvePolicy(config.policy, t.name);
+      if (requiresReason(p)) t.inputSchema = injectReasonSchema(t.inputSchema);
+    }
+    return { tools: [...tools, ...GATEWAY_TOOLS] };
+  });
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    ...
+  });
+  return server;
+}
+
+GATEWAY_TOOLS in tools/gateway.ts: array of Tool objects with name/description/inputSchema (JSON schema plain objects, not zod, since tools/list returns JSON schema). And handlers dispatched by name.
+
+Gateway tool handlers:
+
+check_approval_status(approval_id) → resolveApproval
+approvals_list(status?) → list approvals, return JSON text
+audit_query(tool?, since?, caller_id?) → query audit, return JSON text
+
+For tools/call dispatch:
+
+if (GATEWAY_TOOL_NAMES.has(name)) {
+  const fn = gatewayHandlers[name];
+  return fn(deps, args);
+}
+if (!name.startsWith(ns+'_')) return errorResult(`Unknown tool: ${name}`);
+const upstreamName = name.slice(ns.length+1);
+const reason = extractReason(args);
+const clean = stripReason(args);
+const policy = resolvePolicy(config.policy, name);
+// Guard 1
+if (requiresReason(policy) && !isValidReason(reason)) throw new McpError(ErrorCode.InvalidParams, 'Missing required argument "reason": why is this action needed?');
+if (policy.guard === 'hitl') {
+  const started = await startApproval(deps, name, clean, reason, policy);
+  return pendingResult(started);
+}
+// audit (guard none or reason)
+await recordAudit(deps.store, deps.callerId, name, clean, reason, 'auto-audited');
+const result = await deps.upstream.callTool(upstreamName, clean);
+return result;
+
+Wait — for 'reason' guard we validated reason, audited, forwarded. For 'none', no reason required, still audited. For 'hitl', we don't audit yet (audit at resolution), and we do NOT forward. Good.
+
+Now index.ts fetch router + handleMcp + handleTelegramWebhook.
+
+Also, randomUUID available in Workers via crypto.randomUUID(). Good.
+
+Now, one more design check: The Server auto-handles initialize. But will the transport's stateless mode + enableJsonResponse return JSON for initialize? Yes.
+
+There's a subtlety: For tools/list and tools/call, we set request handlers on the Server. The Server's setRequestHandler validates requests with CallToolRequestSchema / ListToolsRequestSchema. Good.
+
+But: Server also has default tools/list handler? No — Server (low-level) doesn't register default tool handlers; McpServer does. The low-level Server only registers initialize/ping/capabilities. Actually does it have default handlers for tools/list? No. It relies on registerCapabilities + our handlers. But we must ensure the client's tools/list request reaches our handler: since we advertise tools capability and register a handler, the assertRequestHandlerCapability passes.
+
+Wait, actually — does Server provide a default tools/list handler that would conflict? Looking at index.d.ts, Server doesn't have built-in tool handlers (those are in McpServer). It has _oninitialize, ping, message creation, etc. There might be default handlers for capabilities? Let me check protocol.js for default registered handlers like tools/list. In older SDK versions, the low-level Server auto-registered handlers for resources/list etc. only if capabilities were declared. Let me check the Server constructor in index.js.
+
+Let me check index.js for setRequestHandler calls on construction.
+
+Let me verify the low-level Server doesn't pre-register tool handlers that would conflict with my overrides.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+The low-level Server only auto-registers initialize and logging/setLevel; tools/list and tools/call require our explicit setRequestHandler. assertCapabilityForMethod requires capabilities.tools — which I'll set.
+
+Now I'm confident in the design. Let me write all the files.
+
+Let me install @cloudflare/workers-types first, then write files.
+
+Let me now write the files in order. I'll create the directory structure.
+
+One thing about crypto.randomUUID() in Workers — available globally. In Node for tests, available in node 19+. Node 24 → fine.
+
+Let me write tsconfig.json:
+
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
+
+Wait: noEmit true means npm run build (tsc) won't emit. Wrangler bundles directly from src. So a "build" step is unnecessary — wrangler deploy handles bundling. I'll make scripts: typecheck: tsc --noEmit, test: vitest run, dev: wrangler dev, deploy: wrangler deploy, check: npm run typecheck && npm run test.
+
+vitest.config.ts:
+
+import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { environment: 'node' } });
+
+Now let me create everything. Let me start writing.
+
+Also wrangler.jsonc:
+
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mcp-guard-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mcp-guard", "database_id": "REPLACE_AFTER_CREATE" }
+  ],
+  "vars": {
+    "UPSTREAM_URL": "https://nanokvm-uttigen.jaggi.xyz/api/mcp",
+    "UPSTREAM_NAMESPACE": "nanokvm",
+    "TG_WEBHOOK_PATH": "/tg-webhook",
+    "POLICY": "..."
+  }
+}
+
+Hmm, POLICY var would need the full JSON inline — messy. Better to leave POLICY out of wrangler.jsonc and rely on the embedded default. I'll add a comment that POLICY is optional. Actually wrangler.jsonc supports comments. Good.
+
+Let me now also think: compatibility_date "2026-07-01" — plan says that. Fine.
+
+Now write the migration SQL.
+
+Let me write files now. I'll batch the writes.
+
+First install workers-types.
+
+Design confirmed. Now let me set up the toolchain and start writing the implementation.
+
+Now let me write the migration SQL and the source files. Let me start with the store types, config, policy, then the rest.
+
+Now the D1 migration and core modules.
+
+Now the shared MCP types/helpers (types.ts), then upstream, telegram, guards, gateway tools, mcp.ts, index.ts.
+
+Now guards/reason.ts and guards/hitl.ts.
+
+For reason guard:
+
+extractReason(args): reads args.reason (must be string)
+stripReason(args): removes reason key
+isValidReason(reason): non-blank string
+recordAudit helper
+
+For hitl:
+
+startApproval(deps, tool, args, reason, policy) returns pending result
+checkApproval(deps, approvalId) resolves
+
+Deps interface - let me define in a shared place. mcp.ts defines Deps. But hitl/reason need it. Let me define Deps in guards/deps.ts or in mcp.ts and import. To avoid circular imports, define Deps in a separate file src/deps.ts.
+
+Let me create src/deps.ts:
+
+import type { GatewayConfig } from "./config";
+import type { Store } from "./store/types";
+import type { NanokvmUpstream } from "./upstream/nanokvm";
+import type { TelegramClient } from "./telegram/client";
+
+export interface Deps {
+  config: GatewayConfig;
+  store: Store;
+  upstream: NanokvmUpstream;
+  telegram: TelegramClient;
+  callerId: string;
+}
+
+Now guards/hitl.ts. This contains:
+
+startApproval(deps, tool, args, reason, policy) → pending result object
+checkApproval(deps, approvalId) → CallToolResult
+executeApproved(deps, row) → execute upstream, store result, audit
+
+Let me write it.
+
+Expiry check: isExpired(row): if expires_at set and Date.parse(expires_at) <= Date.now() → expired.
+
+For pending resolution:
+
+if expired:
+apply timeout_action:
+'approve' → set status 'approved', execute upstream, audit approved, return real result
+'deny' or null → set status 'expired', audit expired, return error
+else return pending result.
+
+For approved:
+
+if row.result → parse & return
+else execute upstream once, store result, audit approved, return result.
+
+For denied → error result "Denied by operator".
+
+Pending result format: { approval_id, status: "pending", hint } as text. Return jsonResult.
+
+Let me consider audit for hitl: at resolution. For approved: audit row decision 'approved' with approved_by, upstream_status. For denied: decision 'denied', approved_by. For expired: decision 'expired'.
+
+The upstream_status: summary string. For success: ok (maybe with error flag). For error: error message. I'll compute from result: if result.isError → error: <first text> else 'ok'.
+
+Now, in the "approved but result null" case, there's the concurrency risk of double execution. I'll do a claim via D1: use setApprovalStatus with a marker? To keep it simple and correct enough, I'll fetch, and if result is null and status approved, execute then store. Accept double-execution edge for now but add a comment. Actually, I can reduce risk: before executing, do a conditional update that only the first executor wins by setting a sentinel. But D1's COALESCE(?, result) means result can't be set twice with different values; but two executors both see null. Let me implement a lightweight claim: UPDATE approvals SET result = ? WHERE id = ? AND result IS NULL, then check meta.changes. If changes > 0, we own execution. Otherwise another executor won; reload and return stored result. This is clean and correct. Let me implement that in hitl via store method? I don't have a store method for that. I'll add claimApprovalResult(id, result)? That would write the result — but we need to execute FIRST then write. Sequence: set a "running" marker? Simpler: use result sentinel "__RUNNING__" claim, execute, then overwrite with real result via setApprovalStatus (COALESCE won't overwrite since result already set to sentinel...). Hmm COALESCE keeps the sentinel.
+
+Let me instead add a store method claimApproval(id, marker):
+
+UPDATE approvals SET result = ? WHERE id = ? AND status = 'approved' AND result IS NULL
+
+returns changes. First caller wins with marker (e.g. {} or __RUNNING__). Then executor runs upstream and calls setApprovalStatus(id, 'approved', { result: realResult }) — but setApprovalStatus uses COALESCE(?, result) so it won't overwrite marker. I need a store method to overwrite result. Let me add setApprovalResult(id, result) that sets result unconditionally.
+
+This is getting complex. Given the scope (single operator, low traffic), I'll keep it simpler but still safe enough: I'll implement the claim pattern with two store ops. Let me add to Store:
+
+claimApprovalResult(id: string, sentinel: string): Promise<boolean> — UPDATE ... SET result = sentinel WHERE id = ? AND status='approved' AND result IS NULL; return changes>0.
+setApprovalResult(id, result): Promise<void> — UPDATE approvals SET result = ? WHERE id = ?.
+
+Then:
+
+if (!(await store.claimApprovalResult(id, '__RUNNING__'))) {
+  // another invocation won; reload and return stored result (or pending if still running)
+  const again = await store.getApproval(id);
+  if (again?.result && again.result !== '__RUNNING__') return parse(again.result);
+  return pendingResult(id); // still running
+}
+let result;
+try { result = await upstream.callTool(...); } catch (err) { result = errorResult(message); }
+await store.setApprovalResult(id, JSON.stringify(result));
+await recordAudit(... approved ...);
+return result;
+
+This is clean. Let me update store types to add these two methods, and d1.ts implementation.
+
+Also for expiry with timeout_action 'approve': similar execution flow but status transitions pending→approved→executed. I'll set status 'approved' (clearing pending) then run the same execute logic. But careful: executing inside expiry check while row is pending — claimApprovalResult requires status='approved'. So set status first, then claim+execute.
+
+Let me restructure:
+
+async function runApproved(deps, row): Promise<CallToolResult> {
+  const store = deps.store;
+  if (row.result && row.result !== RUNNING_MARKER) {
+    return parseResult(row.result);
+  }
+  const claimed = await store.claimApprovalResult(row.id, RUNNING_MARKER);
+  if (!claimed) {
+    const current = await store.getApproval(row.id);
+    if (current?.result && current.result !== RUNNING_MARKER) return parseResult(current.result);
+    return pendingResult(row.id);
+  }
+  let result: CallToolResult;
+  try {
+    result = await deps.upstream.callTool(stripNamespace(...), JSON.parse(row.args));
+  } catch (err) {
+    result = errorResult(`Upstream execution failed: ${message}`);
+  }
+  await store.setApprovalResult(row.id, JSON.stringify(result));
+  await recordAudit(deps, row.tool, JSON.parse(row.args), row.reason, 'approved', {
+    approvedBy: row.tg_user_id,
+    upstreamStatus: summarize(result),
+    expiresAt: row.expires_at,
+  });
+  return result;
+}
+
+Where stripNamespace derives upstream name from row.tool (namespaced) → remove namespace_ prefix. I'll compute via deps.config.namespace.
+
+Now checkApproval:
+
+export async function checkApproval(deps, approvalId): Promise<CallToolResult> {
+  const row = await deps.store.getApproval(approvalId);
+  if (!row) return errorResult(`Approval not found: ${approvalId}`);
+  switch (row.status) {
+    case 'approved': return runApproved(deps, row);
+    case 'denied': return errorResult(`Approval ${approvalId} was denied by the operator`);
+    case 'expired': return errorResult(`Approval ${approvalId} expired without approval`);
+    case 'pending': {
+      if (isExpired(row)) {
+        const policy = resolvePolicy(deps.config.policyTable, row.tool); // hmm need policy table in deps
+        if (policy.timeout_action === 'approve') {
+          await deps.store.setApprovalStatus(row.id, 'approved', { tgUserId: row.tg_user_id });
+          const updated = { ...row, status: 'approved' as const };
+          return runApproved(deps, updated);
+        }
+        await deps.store.setApprovalStatus(row.id, 'expired', { tgUserId: row.tg_user_id });
+        await recordAudit(deps, row.tool, JSON.parse(row.args), row.reason, 'expired', { expiresAt: row.expires_at });
+        return errorResult(`Approval ${approvalId} expired without approval (timeout_action: deny)`);
+      }
+      return pendingResult(approvalId);
+    }
+  }
+}
+
+Deps needs policyTable: PolicyTable. Let me add to Deps. In mcp.ts buildDeps, loadPolicy(config.policyJson) → policyTable. Good.
+
+pendingResult(id): returns textResult(JSON.stringify({ approval_id: id, status: 'pending' })). Also add a hint to poll check_approval_status. Let me include hint.
+
+Let me now also decide the RUNNING_MARKER constant = "RUNNING".
+
+Now, the approval flow in startApproval: create row, send telegram card, update tg_message_id. Return { approval_id, status: 'pending' }. But tools/call handler should return a CallToolResult. I'll return jsonResult({ approval_id, status: 'pending' }). The architecture says returns { approval_id, status: "pending" }. Good.
+
+Let me write guards/hitl.ts.
+
+Also summarize(result): if result.isError and content[0].text → error: ...; else 'ok'.
+
+Let me write.
+
+Now update Deps to include policyTable, and write guards/hitl.ts.
+
+Wait, in startApproval, I call setApprovalStatus(approvalId, "pending", { result: undefined }) just to update tg_message_id — but setApprovalStatus doesn't set tg_message_id! I need to record the message id. Let me add a store method setApprovalTgMessage(id, messageId) or extend setApprovalStatus. Actually simpler: add tgMessageId to SetApprovalStatusOptions? That's semantically odd. Let me add a dedicated store method setApprovalTgMessage(id, messageId).
+
+Actually let me reconsider - in createApproval I set tg_message_id to null. After sending the card, I want to update it. Let me add store method.
+
+Let me update store types and d1.
+
+I need a store method to record the Telegram message id after posting the card.
+
+Now the gateway-native tools and the Telegram webhook.
+
+The webhook has some cruft: policyTable: null as never, upstream: null as never, and the weird const policy = resolvePolicy(null as never, row.tool); void policy;. That's leftover garbage. Let me clean it up. I need Deps without upstream/policyTable for the webhook, but recordAudit only uses store + callerId. Let me make recordAudit not require full Deps. Actually it takes deps: Deps but only uses deps.store and deps.callerId. Let me refactor recordAudit to accept a narrower interface.
+
+Let me change recordAudit signature to take { store, callerId }. Cleaner.
+
+Let me rewrite the webhook file cleanly.
+
+Now update the callers of recordAudit to pass the narrower context:
+
+The PowerShell regex replacement inserted escaped braces literally: recordAudit(\{ store: ... — it kept the backslash. That's wrong. Let me fix the file directly with the edit tool. Let me read the current state of those lines.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Now rewrite the webhook cleanly (remove the leftover cruft):
+
+Now the main mcp.ts that builds the Server, and index.ts router.
+
+mcp.ts:
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { Env } from "./config";
+import { loadConfig } from "./config";
+import { loadPolicy, resolvePolicy, requiresReason, injectReasonSchema } from "./policy";
+import { D1Store } from "./store/d1";
+import { NanokvmUpstream } from "./upstream/nanokvm";
+import { TelegramClient } from "./telegram/client";
+import { startApproval, checkApproval } from "./guards/hitl";
+import { assertReason, extractReason, stripReason, recordAudit } from "./guards/reason";
+import { callGatewayTool, GATEWAY_TOOLS, GATEWAY_TOOL_NAMES } from "./tools/gateway";
+import type { Tool } from "./types";
+import type { Deps } from "./deps";
+
+export function buildDeps(env: Env, callerId: string, protocolVersion: string | null): Deps {
+  const config = loadConfig(env, protocolVersion);
+  return {
+    config,
+    store: new D1Store(config.db),
+    upstream: new NanokvmUpstream(config),
+    telegram: new TelegramClient(config),
+    policyTable: loadPolicy(config.policyJson),
+    callerId,
+  };
+}
+
+export function namespaceTool(tool, namespace): Tool {
+  return { ...tool, name: `${namespace}_${tool.name}` };
+}
+
+export function buildMcpServer(deps: Deps): Server {
+  const server = new Server({ name: "mcp-guard-gateway", version: "0.1.0" }, { capabilities: { tools: {} } });
+
+  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    const ns = deps.config.namespace;
+    const cursor = request.params?.cursor;
+    const { tools, nextCursor } = await deps.upstream.toolsList(cursor);
+    const namespaced: Tool[] = tools.map((t) => {
+      const tool = { ...t, name: `${ns}_${t.name}` } as Tool;
+      const policy = resolvePolicy(deps.policyTable, tool.name);
+      if (requiresReason(policy)) {
+        tool.inputSchema = injectReasonSchema(tool.inputSchema);
+      }
+      return tool;
+    });
+    return {
+      tools: [...namespaced, ...GATEWAY_TOOLS],
+      ...(nextCursor ? { nextCursor } : {}),
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args = {} } = request.params;
+    return callTool(deps, name, args);
+  });
+
+  return server;
+}
+
+async function callTool(deps, name, args): Promise<CallToolResult> {
+  if (GATEWAY_TOOL_NAMES.has(name)) {
+    return callGatewayTool(deps, name, args);
+  }
+  const prefix = `${deps.config.namespace}_`;
+  if (!name.startsWith(prefix)) {
+    return errorResult(`Unknown tool: ${name}`);
+  }
+  const upstreamName = name.slice(prefix.length);
+  const reason = extractReason(args);
+  const cleanArgs = stripReason(args);
+  const policy = resolvePolicy(deps.policyTable, name);
+
+  if (requiresReason(policy)) {
+    assertReason(reason); // throws -32602
+  }
+
+  if (policy.guard === "hitl") {
+    const started = await startApproval(deps, name, cleanArgs, reason!, policy);
+    return jsonResult(started);
+  }
+
+  let result: CallToolResult;
+  try {
+    result = await deps.upstream.callTool(upstreamName, cleanArgs);
+  } catch (err) {
+    result = errorResult(`Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  await recordAudit({ store: deps.store, callerId: deps.callerId }, name, cleanArgs, reason, "auto-audited", {
+    upstreamStatus: result.isError ? `error: ${firstText(result)}` : "ok",
+  });
+  return result;
+}
+
+Note: for hitl, we validated reason already via assertReason (requiresReason covers hitl). reason! is fine since assertReason threw if invalid.
+
+For the audit upstreamStatus on error: get first text block. Let me add a small helper.
+
+Now index.ts:
+
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { buildDeps, buildMcpServer } from "./mcp";
+import { loadConfig } from "./config";
+import { handleTelegramWebhook } from "./telegram/webhook";
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const config = loadConfig(env);
+    const url = new URL(request.url);
+    if (url.pathname === config.tgWebhookPath) {
+      return handleTelegramWebhook(request, env);
+    }
+    if (url.pathname === "/mcp") {
+      return handleMcp(request, env);
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+};
+
+async function handleMcp(request: Request, env: Env): Promise<Response> {
+  const callerId = request.headers.get(loadConfig(env).callerIdHeader) ?? "anonymous";
+  const protocolVersion = request.headers.get("MCP-Protocol-Version");
+  const deps = buildDeps(env, callerId, protocolVersion);
+  const server = buildMcpServer(deps);
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  await server.connect(transport);
+  return transport.handleRequest(request);
+}
+
+Wait, protocolVersion header may be on subsequent requests, not initialize. On initialize the client sends MCP-Protocol-Version header? The spec: initialize POST includes header MCP-Protocol-Version. Yes, client sends it in the initialize request headers. So capturing it from the request is right. But note the server negotiates the version; the upstream might need the negotiated version, not the client's requested. For simplicity, forwarding the client's header is acceptable — NanoKVM likely doesn't strictly validate. Good enough.
+
+Also note: server.connect(transport) — connect sets transport.onmessage. Then handleRequest processes the HTTP. For stateless single-request, fine.
+
+One concern: creating a new Server and connecting per request — server.connect(transport) calls transport.start(). The transport handleRequest then uses this.onmessage. Good.
+
+But there's a subtlety with enableJsonResponse: true and the response for POST. For a POST with a single JSON-RPC message, transport will respond with JSON (application/json) containing the response. For GET, it opens SSE stream. For a POST that is a notification (no id, like notifications/initialized), transport responds 202 Accepted. Good.
+
+Also MCP-Protocol-Version on responses — transport adds it.
+
+Edge: DELETE /mcp → transport handles (stateless → 200). Fine.
+
+Now, the Env type for ctx: ExecutionContext is optional. I'll include ctx param but unused — actually just omit it. The fetch handler signature (request, env). Fine.
+
+Let me also double check: does WebStandardStreamableHTTPServerTransport import path exist? Yes: @modelcontextprotocol/sdk/server/webStandardStreamableHttp.js. And Server from @modelcontextprotocol/sdk/server/index.js. And types from @modelcontextprotocol/sdk/types.js. Good.
+
+Now let me write mcp.ts and index.ts.
+
+Also I referenced firstText helper — let me inline in mcp.ts.
+
+Also need to make sure jsonResult and errorResult imported in mcp.ts.
+
+Let me write.
+
+Now let me typecheck. There may be issues:
+
+server.setRequestHandler types — the handler signature for ListToolsRequestSchema expects returning the parsed result. The result type from ListToolsResultSchema has tools: Tool[] where Tool requires inputSchema: z.AnySchema? Let me check ListToolsResultSchema's tools shape. The Tool in SDK: name: string; title?: string; description?: string; inputSchema: {...} where inputSchema is a JSON schema object. My Tool type has inputSchema?: unknown. There could be type mismatch when returning. The setRequestHandler for ListToolsRequestSchema expects SchemaOutput<ListToolsResultSchema>? No — setRequestHandler returns SendResultT | Promise<SendResultT> where SendResultT is ServerResult. Hmm, the handler's return type — for the Server, the result type is ServerResult (the Result base with _meta). Actually setRequestHandler handler returns ServerResult | ResultT | Promise<...>. ServerResult = Result = { _meta?: Record<string, unknown> }? That would mean any object is fine since it's loose? Let me check: Result type is { _meta?: {...} } and ServerResult. Returning { tools: [...] } should satisfy Result (it allows arbitrary keys? Let me check). In types.d.ts, Result is defined... Actually ServerResult might be Result = { _meta?: ...; [key: string]: unknown }? Let me check.
+
+Actually the return type of setRequestHandler handler is SendResultT where SendResultT extends Result. If Result is { _meta?: Record<string, unknown> } (loose), then returning an object with extra props is structurally compatible. Let me check the Result type definition.
+
+Let me just run typecheck and fix errors iteratively.
+
+Typecheck passes. Now let me write unit tests with vitest. I need a way to test the guards, policy, upstream, and the mcp server without the SDK transport.
+
+Tests to write:
+
+policy.test.ts — resolvePolicy defaults, parsePolicy validation, injectReasonSchema, loadPolicy.
+guards/reason.test.ts — extractReason, stripReason, isValidReason, assertReason throws McpError -32602.
+guards/hitl.test.ts — startApproval + checkApproval flow with an in-memory fake store and fake upstream/telegram. Test:
+pending → pending result
+denied → error
+approved → executes upstream once, returns result; second poll returns stored result (no double execution)
+expired with timeout_action deny → expired error, no execution
+expired with timeout_action approve → executes
+claim race: two concurrent checkApproval calls → only one upstream execution
+tools/gateway.test.ts — check_approval_status, approvals_list, audit_query.
+mcp.test.ts — buildMcpServer with fake deps: tools/list merges namespacing + reason schema injection; tools/call hitl returns pending; tools/call reason guard missing reason throws McpError -32602.
+
+For testing, I'll create a FakeStore implementing Store with in-memory arrays, and fake upstream/telegram.
+
+For mcp.test.ts, I can call the request handlers directly? The Server doesn't expose handlers. Alternative: use the SDK's Client + a direct transport to exercise the server end-to-end. That's more robust. But setting up an in-memory transport pair: SDK has InMemoryTransport? Let me check for a test transport. There's node:stream transport? For unit tests in node, I could use StreamableHTTPServerTransport... that needs a server. Simpler: Use Client with an in-memory transport pair. SDK exports InMemoryTransport? Let me check.
+
+Actually there's Client in @modelcontextprotocol/sdk/client/index.js and there might be an in-memory transport. Let me grep.
+
+Typecheck passes. Now let me check for an in-memory transport to test the MCP server end-to-end.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+InMemoryTransport.createLinkedPair() exists. I'll write an end-to-end test using the Client from @modelcontextprotocol/sdk/client/index.js connected to our Server via in-memory transports.
+
+Let me now write the test files. First a test helpers file with FakeStore.
+
+Let me create test/helpers.ts with:
+
+FakeStore implementing Store
+makeDeps(overrides) returning Deps with fake upstream/telegram
+
+Then tests:
+
+test/policy.test.ts
+test/guards.test.ts (reason + hitl)
+test/mcp.test.ts (end-to-end via Client + InMemoryTransport)
+
+For the mcp e2e test, the Client's listTools() and callTool(name, args). The Client will throw McpError for -32602 on missing reason. Let me verify Client.callTool throws McpError when server returns error. Yes, client.request throws McpError with the server's error code.
+
+For callTool returning results: returns CallToolResult.
+
+The Client connects and does initialize automatically. Good.
+
+For the fake upstream, toolsList returns some tools like { name: 'click_mouse', ... }. callTool records calls.
+
+Let me write the helpers.
+
+FakeStore:
+
+export class FakeStore implements Store {
+  audits: AuditRow[] = [];
+  approvals: ApprovalRow[] = [];
+  async insertAudit(row: NewAuditRow) { this.audits.push({ id: this.audits.length + 1, ts: row.ts ?? now, ...row }); }
+  ...
+}
+
+Careful with types: NewAuditRow has optional ts; AuditRow requires ts. And decision present. OK.
+
+For claimApprovalResult: find approval with id, status approved, result null → set result=sentinel, return true.
+
+Now the Deps for tests: config needs a full GatewayConfig. loadConfig(env) requires env.DB. Let me create a minimal env: { DB: {} as D1Database } and pass vars. For tests I'll construct config via loadConfig({ DB: null as any, UPSTREAM_URL: 'http://upstream.test', ... }). Actually simpler to build GatewayConfig object directly. But loadConfig is easy. Let me just make a helper testConfig(overrides).
+
+Let me write the tests now.
+
+Also, note crypto.randomUUID is available in Node 24. Good.
+
+For telegram fake: sendApprovalCard returns 42, editCardResolved records calls. I'll make a FakeTelegram.
+
+Let me write test/helpers.ts.
+
+One thing about the Deps type - in tests I need to construct full Deps. Let me create factory in helpers.
+
+Now, the mcp e2e test with Client:
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+const client = new Client({ name: "test", version: "1.0.0" }, { capabilities: {} });
+const server = buildMcpServer(deps);
+await server.connect(serverTransport);
+await client.connect(clientTransport);
+
+const tools = await client.listTools();
+
+listTools returns { tools: [...] }. Check namespacing: nanokvm_click_mouse, gateway tools present.
+
+callTool: await client.callTool({ name: 'nanokvm_screenshot', arguments: { reason: 'need to see screen' } }). Since 'reason' guard → forward upstream, audit. Fake upstream callTool records and returns a text result. Check result content.
+
+Missing reason: await expect(client.callTool({ name: 'nanokvm_screenshot', arguments: {} })).rejects.toThrow() and check error code. The McpError has .code === -32602.
+
+hitl: callTool nanokvm_click_mouse with reason → returns pending result text JSON. Then resolve via store (simulate operator): store.setApprovalStatus(id, 'approved') then callTool check_approval_status → returns real result; upstream.callTool called with 'click_mouse'.
+
+Careful: client.callTool for gateway tool check_approval_status — works.
+
+Let me write it. I need to be careful about zod validation: client.callTool({ name, arguments }) validates. Since arguments is an object. Good.
+
+Let me also handle that client.listTools() calls tools/list, which triggers upstream.toolsList. Fake upstream returns tools.
+
+Let me write all tests.
+
+Also note: The Client may send notifications/initialized; Server handles. And on close, close transports.
+
+Let me create the helper and tests.
+
+Now let me write the test infrastructure and unit tests.
+
+Now the hitl tests: checkApproval flows.
+
+Now the end-to-end mcp test using Client + InMemoryTransport. Let me write it.
+
+The Client type: new Client({ name, version }, { capabilities }). Then client.connect(transport). Then client.listTools(), client.callTool({ name, arguments }).
+
+Note: startApproval in hitl uses crypto.randomUUID() — available in node. Good.
+
+For the e2e test with Client:
+
+tools/list → check namespaced names, reason schema injected into nanokvm_click_mouse (guard hitl) and nanokvm_screenshot (guard reason), and gateway tools appended.
+tools/call on nanokvm_screenshot with reason → upstream called, audit row 'auto-audited'.
+tools/call on nanokvm_screenshot without reason → Client throws McpError with code -32602.
+tools/call on nanokvm_click_mouse with reason → returns pending JSON.
+check_approval_status flow via Client: approve in store then poll → real result.
+unknown tool → error result (not throw).
+
+Let me write it. Need to be careful: client.callTool returns CallToolResult. For gateway tool results, the content text is JSON string.
+
+For asserting thrown McpError code: try { await client.callTool(...) } catch (e) { expect(e).toBeInstanceOf(McpError); expect(e.code).toBe(-32602) }.
+
+The Client validates the server's tool schema for input? The client-side callTool sends arguments; the server validates against CallToolRequestSchema (just checks name/arguments shape). Our server does guard validation. Good.
+
+Also note: client.callTool validates that the tool exists? The Client doesn't pre-validate against list; it just sends. Good.
+
+One concern: client.callTool({ name: 'nanokvm_click_mouse', arguments: { x: 10, reason: 'go' } }). Our callTool strips reason, forwards {x:10} → FakeUpstream records {x:10}. Good.
+
+Let me also test tools/list ordering/merge and reason schema.
+
+Let me write test/mcp.test.ts.
+
+The Client's callTool returns a typed result where content is unknown? In SDK 1.30, client.callTool returns CallToolResult with content possibly typed differently. Actually it might return Result with content typed as unknown due to the new typing. Let me check the client's callTool signature. Perhaps it's CallToolResultSchema inferred with output schema → content is unknown[]? The errors say 'result.content' is of type 'unknown'. So content is unknown entirely. Maybe callTool returns Result type generic. Let me check client.d.ts callTool.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+The return type is a union; content is a union of content blocks. TypeScript infers result.content[0].text — text is optional in the union (not all blocks have text), so content[0] type is the union, and .text is string | undefined. But the error said result.content is unknown. Hmm — maybe the union member for resource block has content typed loosely. Let me just cast in tests: (result.content[0] as { text?: string }).text. Simpler: define a helper firstText(result) in the test that accesses (result.content[0] as any)?.text.
+
+Let me update tests to use a helper text(result) that does (result.content[0] as { text?: string }).text ?? "".
+
+Actually the error is 'result.content' is of type 'unknown'. That suggests content itself is unknown-typed. Maybe because the schema inference yields content: unknown. Regardless, casting via (result.content as Array<{text?: string}>)[0] is fine. Let me add a helper.
+
+Wait, I did a global replace of result.content[0].text → firstText(result). But there was also JSON.parse(result.content[0].text as string) — those lines matched the pattern and got replaced correctly with JSON.parse(firstText(result) as string). Good. And polled.content[0].text → firstText(polled). Good.
+
+Now typecheck and run tests.
+
+The Client callTool returns a union type that may be a task-style result with toolResult instead of content. Interesting — SDK 1.30's callTool returns a union that includes task-based result shapes. The simplest fix: make firstText accept unknown and cast.
+
+Three failures:
+
+reason.test.ts: extractReason({ reason: " " }) — my implementation returns the string if length > 0. " ".length > 0 is true, so returns " ". The test expects undefined. Fix extractReason to use trim().length > 0.
+
+mcp.test.ts "audits unlisted tools with guard none": I called nanokvm_type_text with args { text: "hi" } — but type_text has guard hitl in the default policy! Wait, in the default policy, nanokvm_type_text is hitl. So it requires reason and starts HITL → throws -32602. The test was wrong; type_text is guarded (hitl). I should use a genuinely unlisted tool, e.g., nanokvm_move_mouse? That's reason guard. nanokvm_scroll_mouse is reason. There's no unlisted tool in the FakeUpstream. Let me add an unlisted tool to FakeUpstream, e.g., { name: "ping_display" } which is not in the policy → guard none. Then call it without reason and expect audit.
+
+Actually better: add a tool like unlisted_action to FakeUpstream tools list so tools/list includes nanokvm_unlisted_action. Policy doesn't have it → guard none. Then test call without reason → forwards and audits.
+
+hitl.test.ts "expires with timeout_action approve and executes": The failure says it used timeout_action deny. Why? In checkApproval pending expiry branch: const policy = resolvePolicy(deps.policyTable, row.tool). But row.tool is nanokvm_screenshot, which in the default policy has guard reason (not hitl). So resolvePolicy returns the reason policy with timeout_action: null, not the approve policy I passed to startApproval. The policy I passed to startApproval is only used for creating the row (which stores timeout_action: 'approve', ttl_minutes: 1). But at expiry check, we re-resolve from the policy table rather than using the stored row's timeout_action.
+
+The spec says timeout policy is per-tool, so re-resolving from the table is consistent — but the stored row also has timeout_action. The more correct approach: use the stored row's timeout_action (which was captured at approval creation). That's the actual policy snapshot for this approval. This is more robust (policy changes mid-flight don't change behavior of in-flight approvals). Let me change checkApproval expiry to use row.timeout_action instead of resolving from table.
+
+Then in the test, the row has timeout_action: 'approve'. Good. And the default-policy case (click_mouse, deny) also works via stored value. I'll drop the resolvePolicy import from hitl.ts if unused. Let me check: hitl.ts imports resolvePolicy and ToolPolicy. After change, resolvePolicy may no longer be needed. startApproval takes policy param. Let me remove the import.
+
+Let me also fix the mcp.test "audits unlisted tools" test to add an unlisted tool to FakeUpstream.
+
+Let me make the fixes.
+
+Three failures to fix: extractReason should trim; HITL expiry should use the approval's stored timeout_action; and the "unlisted tool" test needs an actually-unlisted tool.
+
+Now add an unlisted tool to the fake upstream and fix the test:
+
+All 27 tests pass, typecheck clean. Now let me verify the Worker actually boots with wrangler dev. But wrangler dev needs a D1 database_id. Since the ID is REPLACE_AFTER_CREATE, wrangler dev will fail. Let me instead verify the bundle compiles with wrangler deploy --dry-run (dry-run builds and validates without deploying). That checks the Worker bundles correctly. It might require the d1 database binding to exist though. Dry run validates config... Let me try. Actually wrangler deploy --dry-run --outdir just bundles. But D1 binding with placeholder ID may error at deploy-time validation. Let me try and see.
+
+Actually, the plan says "Verify: wrangler dev boots with a 404 handler." Since D1 isn't created yet (that's Phase 6, requires user's account), I can't fully run dev without the DB. But I can do wrangler deploy --dry-run which performs bundle + config validation without needing the actual D1 resource? Let me test.
+
+Also, I should check the miniflare test possibility. Vitest with @cloudflare/vitest-pool-workers would allow real D1 in tests. That's more setup. Given time, the current unit tests + typecheck + bundle dry-run is good for "start implementation". Let me run the dry-run.
+
+All 27 tests pass, typecheck clean. Let me verify the Worker bundles correctly with a dry run.
+
+The Worker bundles successfully. Now let me clean up: remove the .wrangler-dist output dir? It's fine to leave but it's a build artifact. Let me add it to .gitignore along with node_modules. Let me create a .gitignore.
+
+Also, the plan's Phase 1 asked for a tsconfig.json, wrangler.jsonc — done. Phase 2 directory layout — I deviated slightly from the plan (tools/gateway.ts instead of inline; deps.ts). That's fine.
+
+Let me now also do a quick sanity check on the git status and clean up the dry-run artifact. Then update README to reflect that implementation started. Actually the README says "Status: Architecture + implementation plan only. No source code yet." I should update it to reflect the current status. The user said "start implementation" — updating README status is reasonable and part of Phase 9, but let me keep the scope tight. Actually a README status update is valuable. Let me update the status line and repo layout.
+
+Let me create .gitignore first.
+
+Let me also double-check a couple of potential runtime issues:
+
+In startApproval, if Telegram is not configured, sendApprovalCard returns null and we skip recording message id — approval still created. Good (dev mode works without Telegram; the operator can resolve via store or it just expires).
+
+The tg-user-id and webhook: fine.
+
+crypto.randomUUID() in Workers — available. Good.
+
+The listApprovals status cast: fine.
+
+Wrangler compatibility_date 2026-07-01 — fine.
+
+The MCP Server needs capabilities.tools — set. Good.
+
+One concern: setRequestHandler with CallToolRequestSchema — the SDK validates the request. When args include reason, it passes through (schema is loose, arguments is unknown record). Good.
+
+The transport enableJsonResponse: true — for POST responses returns JSON. Good.
+
+Potential issue: For SSE GET, the transport keeps a stream open; when the client disconnects, fine.
+
+In index.ts, I import loadConfig twice (once for config in fetch and once in handleMcp). Minor. Fine.
+
+Now, there's an important design concern about the reason argument and stripReason: For hitl, I strip reason before storing args in the approval. Good. For hitl audit at resolution, args stored are the clean args (no reason). The audit row reason is stored separately. Good.
+
+Another concern: callTool for guard 'hitl' passes cleanArgs to startApproval, and the audit at resolution records JSON.parse(row.args) = cleanArgs. Good.
+
+Now let me also double check the D1 setApprovalStatus uses COALESCE for tg_user_id and result. When webhook resolves with deny, result stays NULL. Good. When approved by webhook, result NULL, so when polling, runApproved executes. Good.
+
+One more: the claimApprovalResult requires status='approved' AND result IS NULL. After webhook sets status='approved', result is NULL → claim works. Good. But if timeout_action: approve expiry path: we set status='approved' (result still null) then runApproved claims. Good.
+
+Edge: If webhook approves and then a second webhook deny arrives for same id — we check row.status !== 'pending' → skip. Good.
+
+Now let me create .gitignore and update README status. Also add a note about local dev requiring D1.
+
+Actually, let me reconsider whether to update README. The instructions say don't create docs proactively, but editing existing README to reflect reality is reasonable and part of the task. I'll make a minimal update to the Status line and repo layout to reflect implementation. Keep it concise.
+
+Let me write .gitignore.
+
+Worker bundles cleanly. Let me add a .gitignore and remove the build artifact.
+
+Good. Now let me update the README status section minimally to reflect implementation, since it currently says "No source code yet." That's now misleading.
+
+Let me update:
+
+Status line
+Repo layout section to include src/, migrations/, test/
+Maybe a short "Getting started" note.
+
+Keep it brief.
+
+Now update the README status line, which currently claims there's no source code.
+
+Now let me update the roadmap / add a development section. Also let me add a short "Running locally" section at the end. Let me check current README ending.
+
+Explored
+Explored
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ read
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ search
+es
+,
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+ list
+s
+
+Now let me run the full check once more to confirm everything is green, and also verify the git diff is sensible. Then I'll update the todo list and summarize.
+
+Let me run npm run check.
+
+All phases 1-5 + deploy files done, verified. Let me give a concise summary. I should not commit (user didn't ask).
+
+Let me summarize what was implemented and what's next (requires their credentials).
+
+Implementation of Phases 1–5 landed and verified: typecheck clean, 27/27 tests pass, wrangler deploy --dry-run bundles successfully.
+
+What's in src/
+
+index.ts — fetch() router: /mcp (stateless MCP Streamable HTTP via WebStandardStreamableHTTPServerTransport) and /tg-webhook (Telegram inline-button callbacks).
+mcp.ts — SDK Server with tools/list merging (namespaced nanokvm_* upstream tools + gateway-native tools) and tools/call interception.
+policy.ts — per-tool guard table (mirrors examples/policy.jsonc, overridable via POLICY var) + reason schema injection.
+guards/reason.ts — Guard 1: missing/blank reason → JSON-RPC -32602; every call audited.
+guards/hitl.ts — Guard 2: async handleId pattern. Returns { approval_id, status: "pending" } immediately; check_approval_status polls and executes upstream exactly once on approval (atomic claim in D1 prevents double-execution), honors per-tool timeout_action on TTL expiry.
+upstream/nanokvm.ts — fetch proxy with server-side secret injection (CF Access + NanoKVM API key), prefix stripping, JSON/SSE response parsing.
+telegram/ — card + Approve/Deny keyboard, card edit on resolution, webhook → store update + audit.
+store/d1.ts + migrations/0001_init.sql — audit/approvals tables behind the Store interface.
+
+Tests cover policy parsing, reason validation, full HITL lifecycle (pending → approve/deny/expire, deny vs approve timeout, race safety), and in-memory end-to-end MCP client↔server.
+
+Deploy (Phase 6+) needs your Cloudflare/Telegram credentials: wrangler d1 create mcp-guard → paste database_id into wrangler.jsonc, wrangler d1 migrations apply, then set secrets. Want me to walk through those steps now, or leave it here?
+
+Build · deepseek-v4-flash · 16m 30s
+27 Changed files
++6199
+-6
+Show all
+.gitignore
++5
+-0
+README.md
++44
+-6
+‪migrations/‬
+0001_init.sql
++36
+-0
+package-lock.json
++4209
+-0
+package.json
++30
+-0
+‪src/‬
+config.ts
++51
+-0
+‪src/‬
+deps.ts
++14
+-0
+‪src/guards/‬
+hitl.ts
++151
+-0
+‪src/guards/‬
+reason.ts
++61
+-0
+‪src/‬
+index.ts
++41
+-0
++17 more files
+
+---
+
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "OpenCode" (https://opncd.ai)
