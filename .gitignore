@@ -6,3 +6,5 @@ dist/
 relay.js
 SESSION_RESUME.md
 SESSION_TRANSCRIPT.md
+docs/OPENCODE_SESSION_*
+docs/opencode-session-*
