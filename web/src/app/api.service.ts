@@ -11,6 +11,8 @@ import type {
   MemoryFileInfo,
   MemoryTree,
   SandboxEntry,
+  SkillCheckResult,
+  SkillSource,
   StatusInfo,
   ToolEntry,
   Upstream,
@@ -114,6 +116,31 @@ export class ApiService {
       path,
       content,
       commit,
+    });
+  }
+
+  deleteMemoryFile(path: string) {
+    return this.request<{ path: string; commitRef: string | null }>(
+      'DELETE',
+      '/memory/file?path=' + encodeURIComponent(path)
+    );
+  }
+
+  skillSources() {
+    return this.request<{ skills: SkillSource[] }>('GET', '/memory/skills/sources');
+  }
+
+  checkSkills(name?: string) {
+    return this.request<{ results: SkillCheckResult[] }>(
+      'POST',
+      '/memory/skills/check',
+      name ? { name } : {}
+    );
+  }
+
+  updateSkill(name: string) {
+    return this.request<{ ok: boolean; commitRef: string | null }>('POST', '/memory/skills/update', {
+      name,
     });
   }
 

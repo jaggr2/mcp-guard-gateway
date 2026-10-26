@@ -20,6 +20,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           <a routerLink="/sandboxes" routerLinkActive="active">Sandboxes</a>
           <a routerLink="/browser" routerLinkActive="active">Browser Sessions</a>
           <a routerLink="/memory" routerLinkActive="active">Memory &amp; Skills</a>
+          <a routerLink="/skill-updates" routerLinkActive="active">Skill Updates</a>
         </div>
 
         <div class="nav-group">

@@ -7,7 +7,13 @@ import type { GatewayConfig } from "../config";
 import type { HermesBridge } from "../hermes/bridge";
 import { NoopHermesBridge } from "../hermes/bridge";
 import { buildDeps } from "../mcp";
-import { readMemoryFile, writeMemoryFile } from "../memory/files";
+import { deleteMemoryFile, readMemoryFile, writeMemoryFile } from "../memory/files";
+import {
+  checkSkillSource,
+  listSkillSources,
+  updateSkillFromSource,
+  type SkillCheckResult,
+} from "../memory/sources";
 import {
   ConfigStore,
   type LifecycleMode,
@@ -481,6 +487,51 @@ export function registerApi(
       return c.json({ error: "path and content are required" }, 400);
     }
     const res = writeMemoryFile(dir, body.path, body.content, body.commit !== false);
+    return c.json(res, "error" in res ? 400 : 200);
+  });
+
+  api.delete("/memory/file", operator, (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const res = deleteMemoryFile(dir, c.req.query("path") ?? "", true);
+    return c.json(res, "error" in res ? 400 : 200);
+  });
+
+  // Skill sources (source_url frontmatter → check/update against upstream) ----
+  api.get("/memory/skills/sources", anyAuth, (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    return c.json({ skills: listSkillSources(dir) });
+  });
+
+  api.post("/memory/skills/check", operator, async (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const body = (await c.req.json().catch(() => null)) as { name?: string } | null;
+    const names = body?.name
+      ? [body.name]
+      : listSkillSources(dir).map((s) => s.name);
+    const results: SkillCheckResult[] = [];
+    for (const name of names) {
+      results.push(await checkSkillSource(dir, name));
+    }
+    return c.json({ results });
+  });
+
+  api.post("/memory/skills/update", operator, async (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const body = (await c.req.json().catch(() => null)) as { name?: string } | null;
+    if (!body?.name) return c.json({ error: "name is required" }, 400);
+    const res = await updateSkillFromSource(dir, body.name);
     return c.json(res, "error" in res ? 400 : 200);
   });
 

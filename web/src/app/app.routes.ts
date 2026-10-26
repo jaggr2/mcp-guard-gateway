@@ -3,6 +3,8 @@ import { DashboardComponent } from './dashboard.component';
 import { SandboxesComponent } from './sandboxes.component';
 import { BrowserComponent } from './browser.component';
 import { MemoryComponent } from './memory.component';
+import { EditorComponent } from './editor.component';
+import { SkillUpdatesComponent } from './skill-updates.component';
 import { UpstreamsComponent } from './upstreams.component';
 import { ApprovalsComponent } from './approvals.component';
 import { AuditComponent } from './audit.component';
@@ -15,6 +17,8 @@ export const routes: Routes = [
   { path: 'sandboxes', component: SandboxesComponent },
   { path: 'browser', component: BrowserComponent },
   { path: 'memory', component: MemoryComponent },
+  { path: 'editor', component: EditorComponent },
+  { path: 'skill-updates', component: SkillUpdatesComponent },
   { path: 'architecture', component: ArchitectureComponent },
   { path: 'upstreams', component: UpstreamsComponent },
   { path: 'approvals', component: ApprovalsComponent },

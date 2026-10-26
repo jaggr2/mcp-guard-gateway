@@ -121,6 +121,24 @@ export interface MemoryFileInfo {
   content: string;
   size: number;
   modifiedAt: string;
+  siblings: string[];
+}
+
+export interface SkillSource {
+  name: string;
+  sourceUrl: string;
+  version: string;
+}
+
+export type SkillCheckStatus = 'up-to-date' | 'deviated' | 'no-source' | 'fetch-error';
+
+export interface SkillCheckResult {
+  name: string;
+  sourceUrl: string;
+  status: SkillCheckStatus;
+  localLines: number;
+  sourceLines: number;
+  diff: string[];
 }
 
 export interface StatusInfo {

@@ -1,12 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService } from './api.service';
-import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
+import type { LearningEntry, MemoryTree } from './models';
 
 @Component({
   selector: 'app-memory',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <div class="page">
       <h2 class="page-title">Central Memory &amp; Skills</h2>
@@ -20,7 +21,7 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
         <div class="header-row">
           <h3>Library</h3>
           <div class="row">
-            <button class="btn-ghost btn-primary" (click)="newFile()">+ New file</button>
+            <a class="btn-ghost btn-primary" routerLink="/editor">+ New file</a>
             <button class="btn-ghost btn-primary" (click)="loadTree()">Refresh</button>
           </div>
         </div>
@@ -33,10 +34,11 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
               <summary>skills ({{ t.skills.length }})</summary>
               <div class="tree-grid">
                 @for (s of t.skills; track s.name) {
-                  <div class="tree-item tree-click" (click)="openSkill(s)" [title]="s.description">
+                  <a class="tree-item tree-click" [routerLink]="['/editor']"
+                     [queryParams]="{ path: s.path + '/SKILL.md' }" [title]="s.description">
                     <span class="mono tree-name">{{ s.name }}</span>
                     <span class="muted">{{ s.description }}</span>
-                  </div>
+                  </a>
                 } @empty {
                   <div class="muted">none yet</div>
                 }
@@ -45,7 +47,7 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
             <details>
               <summary>memories ({{ t.memories.length }})</summary>
               @for (m of t.memories; track m.name) {
-                <div class="tree-file mono tree-click" (click)="openFile(m.path)">├─ {{ m.name }}</div>
+                <a class="tree-file mono tree-click" [routerLink]="['/editor']" [queryParams]="{ path: m.path }">├─ {{ m.name }}</a>
               }
             </details>
             <details>
@@ -54,7 +56,7 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
                 <details class="tree-sub">
                   <summary class="mono">├─ {{ j.name }} ({{ j.count }} entries)</summary>
                   @for (f of j.files; track f) {
-                    <div class="tree-file mono tree-click" (click)="openFile(j.path + '/' + f)">│  ├─ {{ f }}</div>
+                    <a class="tree-file mono tree-click" [routerLink]="['/editor']" [queryParams]="{ path: j.path + '/' + f }">│  ├─ {{ f }}</a>
                   }
                 </details>
               }
@@ -63,7 +65,7 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
               <details>
                 <summary>root files ({{ t.other.length }})</summary>
                 @for (o of t.other; track o) {
-                  <div class="tree-file mono tree-click" (click)="openFile(o)">├─ {{ o }}</div>
+                  <a class="tree-file mono tree-click" [routerLink]="['/editor']" [queryParams]="{ path: o }">├─ {{ o }}</a>
                 }
               </details>
             }
@@ -72,51 +74,6 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
           <p class="muted">Loading library…</p>
         }
       </div>
-
-      @if (detailOpen()) {
-        <div class="section">
-          <div class="header-row">
-            <h3 class="mono">{{ selectedPath() || 'New file' }}</h3>
-            <div class="row">
-              @if (fileDirty()) { <span class="badge warn">unsaved</span> }
-              @if (saveMsg(); as msg) { <span class="badge ok">{{ msg }}</span> }
-              <button class="btn-primary" (click)="saveFile(true)"
-                      [disabled]="fileLoading() || (!fileDirty() && !creating())">Save &amp; commit</button>
-              <button class="btn-ghost btn-primary" (click)="saveFile(false)"
-                      [disabled]="fileLoading() || (!fileDirty() && !creating())">Save</button>
-              <button class="btn-ghost" (click)="closeDetail()">Close</button>
-            </div>
-          </div>
-
-          @if (creating()) {
-            <label class="new-path">
-              Path (under memories/, skills/, journal/ — or a top-level .md)
-              <input class="grow" [ngModel]="selectedPath()" (ngModelChange)="selectedPath.set($event)"
-                     placeholder="memories/my-note.md" />
-            </label>
-          }
-
-          @if (skillFiles().length > 1) {
-            <div class="file-strip">
-              @for (f of skillFiles(); track f) {
-                <button class="file-chip" [class.active]="selectedPath() === skillDir() + '/' + f"
-                        (click)="openFile(skillDir() + '/' + f)">{{ f }}</button>
-              }
-            </div>
-          }
-
-          @if (fileError(); as err) {
-            <p class="error">{{ err }}</p>
-          }
-          @if (fileLoading()) {
-            <p class="muted">Loading…</p>
-          } @else {
-            <textarea class="editor" rows="24" spellcheck="false"
-                      [ngModel]="fileContent()" (ngModelChange)="onEdit($event)"></textarea>
-            <p class="muted mono">{{ fileContent().length }} chars</p>
-          }
-        </div>
-      }
 
       <div class="section">
         <div class="header-row">
@@ -201,12 +158,7 @@ import type { LearningEntry, MemoryTree, MemoryTreeSkill } from './models';
     .tree-click { cursor: pointer; }
     .tree-click:hover { color: var(--accent-strong); }
     .row { display: flex; gap: var(--sp-2); align-items: center; }
-    .file-strip { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0; }
-    .file-chip { font: inherit; font-size: var(--fs-xs); background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 2px var(--sp-2); cursor: pointer; }
-    .file-chip.active { background: var(--accent-bg); color: var(--accent-strong); border-color: var(--accent); }
-    .new-path { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-sm); margin-bottom: var(--sp-2); }
     .grow { flex: 1; }
-    .editor { width: 100%; font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.5; background: var(--bg-inset); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: var(--sp-3); resize: vertical; }
   `,
 })
 export class MemoryComponent {
@@ -215,19 +167,6 @@ export class MemoryComponent {
   tree = signal<MemoryTree | null>(null);
   treeError = signal(false);
   showAddLearning = signal(false);
-
-  // file detail view
-  detailOpen = signal(false);
-  creating = signal(false);
-  selectedPath = signal('');
-  skillDir = signal('');
-  skillFiles = signal<string[]>([]);
-  fileContent = signal('');
-  fileLoading = signal(false);
-  fileError = signal<string | null>(null);
-  fileDirty = signal(false);
-  saveMsg = signal<string | null>(null);
-  private loadedContent = '';
 
   lForm: {
     kind: 'gotcha' | 'memory' | 'skill';
@@ -259,74 +198,6 @@ export class MemoryComponent {
       this.treeError.set(false);
     } catch {
       this.treeError.set(true);
-    }
-  }
-
-  openSkill(skill: MemoryTreeSkill) {
-    this.skillDir.set(skill.path);
-    this.skillFiles.set(skill.fileNames ?? []);
-    void this.openFile(`${skill.path}/SKILL.md`);
-  }
-
-  async openFile(path: string) {
-    this.detailOpen.set(true);
-    this.creating.set(false);
-    this.selectedPath.set(path);
-    this.fileLoading.set(true);
-    this.fileError.set(null);
-    this.saveMsg.set(null);
-    try {
-      const f = await this.api.memoryFile(path);
-      this.fileContent.set(f.content);
-      this.loadedContent = f.content;
-      this.fileDirty.set(false);
-    } catch {
-      this.fileError.set('Could not load this file.');
-    } finally {
-      this.fileLoading.set(false);
-    }
-  }
-
-  newFile() {
-    this.detailOpen.set(true);
-    this.creating.set(true);
-    this.selectedPath.set('memories/');
-    this.skillFiles.set([]);
-    this.fileContent.set('');
-    this.loadedContent = '';
-    this.fileDirty.set(false);
-    this.fileError.set(null);
-    this.saveMsg.set(null);
-  }
-
-  onEdit(value: string) {
-    this.fileContent.set(value);
-    this.fileDirty.set(value !== this.loadedContent);
-  }
-
-  closeDetail() {
-    this.detailOpen.set(false);
-  }
-
-  async saveFile(commit: boolean) {
-    const path = this.selectedPath().trim();
-    if (!path) return;
-    this.fileLoading.set(true);
-    this.fileError.set(null);
-    try {
-      const res = await this.api.saveMemoryFile(path, this.fileContent(), commit);
-      this.loadedContent = this.fileContent();
-      this.fileDirty.set(false);
-      this.creating.set(false);
-      this.saveMsg.set(commit && res.commitRef ? `committed ${res.commitRef}` : 'saved');
-      setTimeout(() => this.saveMsg.set(null), 5000);
-      await this.loadTree();
-    } catch {
-      this.fileError.set(
-        'Save failed — path must be under memories/, skills/, journal/ (or a top-level .md) and under 512KB.'
-      );
-    } finally {
-      this.fileLoading.set(false);
     }
   }
 

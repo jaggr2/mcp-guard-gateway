@@ -10,7 +10,15 @@
  * authenticated operator (forward-auth / operator token) editing by hand.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, normalize } from "node:path";
 
 const ALLOWED_ROOTS = ["memories/", "skills/", "journal/"];
@@ -21,6 +29,7 @@ export interface MemoryFileInfo {
   content: string;
   size: number;
   modifiedAt: string;
+  siblings: string[];
 }
 
 /** Normalize + validate an operator-supplied repo path. Returns null when unsafe. */
@@ -45,11 +54,20 @@ export function readMemoryFile(
   const st = statSync(full);
   if (!st.isFile()) return { error: "not a file" };
   if (st.size > MAX_BYTES) return { error: "file too large to edit (>512KB)" };
+  let siblings: string[] = [];
+  try {
+    siblings = readdirSync(dirname(full))
+      .filter((n) => !n.startsWith(".") && statSync(join(dirname(full), n)).isFile())
+      .sort();
+  } catch {
+    siblings = [];
+  }
   return {
     path,
     content: readFileSync(full, "utf8"),
     size: st.size,
     modifiedAt: st.mtime.toISOString(),
+    siblings,
   };
 }
 
@@ -72,7 +90,35 @@ export function writeMemoryFile(
   if (!commit || !existsSync(join(agentMemoryDir, ".git"))) {
     return { path, commitRef: null };
   }
+  const commitRef = commitAndPush(agentMemoryDir, `edit: ${path} (manual, Warden UI)`);
+  if ("error" in commitRef) return commitRef;
+  return { path, commitRef: commitRef.commitRef };
+}
 
+export function deleteMemoryFile(
+  agentMemoryDir: string,
+  rawPath: string,
+  commit: boolean
+): { path: string; commitRef: string | null } | { error: string } {
+  const path = cleanMemoryPath(rawPath);
+  if (!path) return { error: "path must be under memories/, skills/, journal/, or a top-level .md" };
+  const full = join(agentMemoryDir, path);
+  if (!existsSync(full)) return { error: "not found" };
+  rmSync(full);
+
+  if (!commit || !existsSync(join(agentMemoryDir, ".git"))) {
+    return { path, commitRef: null };
+  }
+  const commitRef = commitAndPush(agentMemoryDir, `remove: ${path} (manual, Warden UI)`);
+  if ("error" in commitRef) return commitRef;
+  return { path, commitRef: commitRef.commitRef };
+}
+
+/** git add -A + commit + best-effort push (rebase-once retry, like learn-skill). */
+export function commitAndPush(
+  agentMemoryDir: string,
+  message: string
+): { commitRef: string } | { error: string } {
   let commitRef: string | null = null;
   try {
     execFileSync("git", ["-C", agentMemoryDir, "add", "-A"], { stdio: "ignore" });
@@ -87,7 +133,7 @@ export function writeMemoryFile(
         "user.email=opencode@jaggi.xyz",
         "commit",
         "-m",
-        `edit: ${path} (manual, Warden UI)`,
+        message,
       ],
       { stdio: "ignore" }
     );
@@ -111,11 +157,11 @@ export function writeMemoryFile(
           timeout: 15_000,
         });
       } catch (pushError) {
-        console.warn(`[warden memory] manual edit commit ${commitRef} not pushed:`, String(pushError));
+        console.warn(`[warden memory] commit ${commitRef} not pushed:`, String(pushError));
       }
     }
+    return { commitRef: commitRef ?? "local" };
   } catch (err) {
     return { error: `git commit failed: ${String(err).slice(0, 200)}` };
   }
-  return { path, commitRef };
 }

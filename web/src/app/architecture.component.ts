@@ -481,10 +481,12 @@ export class ArchitectureComponent implements OnInit, OnDestroy {
   }
 
   trustHealth(state: string | undefined): Health {
-    if (state === 'pinned') return 'ok';
-    if (state === 'unpinned') return 'warn';
     if (!state) return 'neutral';
-    return 'danger';
+    if (state === 'ok' || state === 'pinned' || state === 'verified') return 'ok';
+    if (state === 'unpinned' || state === 'warn' || state === 'degraded') return 'warn';
+    if (state === 'drift' || state === 'drifted' || state === 'error' || state === 'down') return 'danger';
+    // Unknown non-empty state: degrade to warn, never paint the map red.
+    return 'warn';
   }
 
   sandboxHealth(status: string | undefined): Health {
