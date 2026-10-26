@@ -70,10 +70,6 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
   // docs/BROWSER_BROKER.md Part 11.3) — ensureBrowserPolicies() never overwrites rows.
   ensureBrowserPolicies(configStore);
 
-  seedSetting(configStore, "hermes.bridgeUrl", config.hermesBridgeUrl);
-  if (config.hermesConversationKey) {
-    seedSetting(configStore, "hermes.conversationKey", config.hermesConversationKey);
-  }
   if (config.hassUrl) {
     seedSetting(configStore, "hass.url", config.hassUrl);
   }

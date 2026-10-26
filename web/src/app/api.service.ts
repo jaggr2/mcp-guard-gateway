@@ -148,14 +148,6 @@ export class ApiService {
     return this.request<{ rows: AuditRow[] }>('GET', `/audit?${q.toString()}`);
   }
 
-  settings() {
-    return this.request<{ settings: Record<string, string> }>('GET', '/settings');
-  }
-
-  saveSettings(settings: Record<string, string>) {
-    return this.request<{ settings: Record<string, string> }>('PUT', '/settings', { settings });
-  }
-
   clients() {
     return this.request<{ clients: ClientRow[] }>('GET', '/clients');
   }

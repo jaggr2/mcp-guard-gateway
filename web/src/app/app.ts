@@ -33,7 +33,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           <div class="nav-label">System</div>
           <a routerLink="/memory" routerLinkActive="active">Memory &amp; Skills</a>
           <a routerLink="/architecture" routerLinkActive="active">Architecture</a>
-          <a routerLink="/settings" routerLinkActive="active">Settings &amp; Secrets</a>
+          <a routerLink="/settings" routerLinkActive="active">Secrets</a>
         </div>
       </nav>
       <main>

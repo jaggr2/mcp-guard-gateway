@@ -6,10 +6,6 @@ export interface GatewayConfig {
   publicUrl: string;
   /** Master key for encrypting secrets at rest (AES-256-GCM). */
   masterKey: string;
-  /** Legacy internal hermes-bridge endpoint (kept for config compatibility). */
-  hermesBridgeUrl: string;
-  /** Legacy Hermes conversation target. */
-  hermesConversationKey: string | null;
   /** Home Assistant base URL (e.g. http://192.168.30.10:8123) for HITL notifications. */
   hassUrl: string | null;
   /** Home Assistant long-lived access token. */
@@ -74,7 +70,6 @@ const DEFAULTS = {
   DB_PATH: "./data/gateway.db",
   HOST: "0.0.0.0",
   PORT: "8080",
-  HERMES_BRIDGE_URL: "http://127.0.0.1:8643",
   HASS_NOTIFY_SERVICE: "notify",
   SANDBOX_CTL_SCRIPT: "/opt/homelab/x64-rack-server/scripts/sandbox-ctl.py",
   BROWSER_ORCHESTRATOR_URL: "http://browser-host:8940",
@@ -113,8 +108,6 @@ export function loadConfig(env: Record<string, string | undefined>, protocolVers
     port: Number(env.PORT ?? DEFAULTS.PORT),
     publicUrl,
     masterKey: env.SECRET_MASTER_KEY ?? "dev-master-key-change-me",
-    hermesBridgeUrl: env.HERMES_BRIDGE_URL ?? DEFAULTS.HERMES_BRIDGE_URL,
-    hermesConversationKey: env.HERMES_CONVERSATION_KEY ?? null,
     hassUrl: env.HASS_URL ?? null,
     hassToken: env.HASS_TOKEN ?? null,
     hassNotifyService: env.HASS_NOTIFY_SERVICE ?? DEFAULTS.HASS_NOTIFY_SERVICE,

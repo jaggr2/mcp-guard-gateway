@@ -73,8 +73,8 @@ describe("ConfigStore", () => {
   it("round-trips settings and clients", () => {
     const db = openDatabase(":memory:");
     const cs = new ConfigStore(db);
-    cs.setSetting("hermes.conversationKey", "telegram:123");
-    expect(cs.getSetting("hermes.conversationKey")).toBe("telegram:123");
+    cs.setSetting("example.setting", "value-123");
+    expect(cs.getSetting("example.setting")).toBe("value-123");
 
     cs.upsertClient({ id: "c1", name: "opencode", secretHash: "abc", scopes: "mcp", enabled: true });
     expect(cs.getClient("c1")?.name).toBe("opencode");

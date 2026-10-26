@@ -59,8 +59,6 @@ export function testConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     port: 8080,
     publicUrl: "https://mcp-guard.example",
     masterKey: "test-master-key",
-    hermesBridgeUrl: "http://hermes-bridge:8643",
-    hermesConversationKey: null,
     hassUrl: null,
     hassToken: null,
     hassNotifyService: "notify",

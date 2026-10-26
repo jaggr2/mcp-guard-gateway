@@ -8,15 +8,12 @@ import { ApiService } from './api.service';
   imports: [FormsModule],
   template: `
     <div class="page">
-      <h2 class="page-title">Settings &amp; Secrets</h2>
-      <p class="page-subtitle">Notification targets and encrypted credentials for upstreams — values live server-side only.</p>
-      <h3>Notifications (Home Assistant)</h3>
-      <div class="row">
-        <label>Notification target</label>
-        <input [(ngModel)]="conversationKey" placeholder="telegram:123456789" class="grow" />
-        <button (click)="saveSettings()">Save</button>
-      </div>
-      <p class="hint">Where approval cards and alerts are delivered (stored as <code>hermes.conversationKey</code>, the HA notify target).</p>
+      <h2 class="page-title">Secrets</h2>
+      <p class="page-subtitle">
+        Encrypted credentials for upstreams (AES-256-GCM, server-side only). Approval cards
+        and alerts are delivered to the Home Assistant notify service — that target is static
+        config (<code>HASS_NOTIFY_SERVICE</code> in <code>warden.env</code>), not editable here.
+      </p>
 
       <h3>Upstream secrets</h3>
       <p class="hint">
@@ -54,23 +51,12 @@ import { ApiService } from './api.service';
 })
 export class SettingsComponent {
   private api = inject(ApiService);
-  conversationKey = '';
   secretName = '';
   secretValue = '';
   secrets = signal<{ name: string; created_at: string }[]>([]);
 
   constructor() {
-    void this.init();
-  }
-
-  async init() {
-    const res = await this.api.settings();
-    this.conversationKey = res.settings['hermes.conversationKey'] ?? '';
-    await this.reloadSecrets();
-  }
-
-  async saveSettings() {
-    await this.api.saveSettings({ 'hermes.conversationKey': this.conversationKey });
+    void this.reloadSecrets();
   }
 
   async reloadSecrets() {
