@@ -6,8 +6,7 @@ import { SecretBox } from "./secrets";
 
 /**
  * Seeds the configuration tables on first boot: upstreams, secrets, policies,
- * default OpenCode project sandboxes (`rsearch`, `calendar-m365-google-sync`, `agent-memory`),
- * and the default 07:00 Morning Digest schedule.
+ * and default OpenCode project sandboxes (`rsearch`, `calendar-m365-google-sync`, `agent-memory`).
  * Never overwrites existing rows.
  */
 export function bootstrap(config: GatewayConfig, db: Database.Database): void {
@@ -130,22 +129,6 @@ export function bootstrap(config: GatewayConfig, db: Database.Database): void {
         lastActiveAt: null,
       });
     }
-  }
-
-  // Seed default 07:00 Morning Digest cron job (replaces Hermes morning-digest cron)
-  if (configStore.listSchedules().length === 0) {
-    configStore.upsertSchedule({
-      id: randomUUID(),
-      name: "morning-digest",
-      cronExpr: "0 7 * * *",
-      project: "system",
-      model: "deepseek-v4-flash",
-      prompt:
-        "Produce a concise (<200 words) morning briefing covering: 1. Home Assistant status, 2. Homelab backup tiers, ZFS health & Incus instances, 3. OpenCode sandbox spend & any pending approvals.",
-      allowedUpstreams: "*",
-      deliveryTarget: "ha_notify",
-      enabled: true,
-    });
   }
 }
 

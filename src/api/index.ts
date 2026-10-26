@@ -104,8 +104,6 @@ export function registerApi(
       };
     });
 
-    const digestSchedule = configStore.listSchedules().find((s) => s.name === "morning-digest");
-
     return c.json({
       online: true,
       sandboxes,
@@ -120,7 +118,6 @@ export function registerApi(
         reason: r.reason,
         created_at: r.created_at,
       })),
-      morning_digest: digestSchedule?.lastOutput ?? "No morning briefing generated yet.",
       budget_alert: budgetAlert,
       budget_alert_reason: budgetAlertReason,
     });
@@ -394,35 +391,6 @@ export function registerApi(
     });
     if (!res.ok) return c.json({ error: res.error }, 400);
     return c.json({ ok: true, learning: res.learning });
-  });
-
-  // Schedules (Warden Cron) ---------------------------------------------------
-  api.get("/schedules", anyAuth, (c) => {
-    return c.json({ schedules: configStore.listSchedules() });
-  });
-
-  api.post("/schedules", admin, async (c) => {
-    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body || typeof body.name !== "string" || typeof body.cronExpr !== "string" || typeof body.prompt !== "string") {
-      return c.json({ error: "name, cronExpr, and prompt are required" }, 400);
-    }
-    configStore.upsertSchedule({
-      id: randomUUID(),
-      name: body.name.trim(),
-      cronExpr: body.cronExpr.trim(),
-      project: typeof body.project === "string" ? body.project : "system",
-      model: typeof body.model === "string" ? body.model : "deepseek-v4-flash",
-      prompt: body.prompt,
-      allowedUpstreams: typeof body.allowedUpstreams === "string" ? body.allowedUpstreams : "*",
-      deliveryTarget: typeof body.deliveryTarget === "string" ? body.deliveryTarget : "ha_notify",
-      enabled: body.enabled !== false,
-    });
-    return c.json({ ok: true });
-  });
-
-  api.delete("/schedules/:id", admin, (c) => {
-    configStore.deleteSchedule(c.req.param("id"));
-    return c.json({ ok: true });
   });
 
   // upstreams -----------------------------------------------------------------

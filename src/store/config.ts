@@ -111,22 +111,6 @@ export interface LearningRow {
   commitRef: string | null;
 }
 
-export interface ScheduleRow {
-  id: string;
-  name: string;
-  cronExpr: string;
-  project: string;
-  model: string;
-  prompt: string;
-  allowedUpstreams: string;
-  deliveryTarget: string;
-  enabled: boolean;
-  lastRunAt: string | null;
-  lastStatus: string | null;
-  lastOutput: string | null;
-  createdAt: string;
-}
-
 const nowIso = () => new Date().toISOString();
 
 function parseHeaderMap(json: string | null): Record<string, string> {
@@ -643,64 +627,5 @@ export class ConfigStore {
       )
       .run(ts, l.sourceProject, l.kind, l.targetPath, l.title, l.content, l.mode, l.rationale, l.status, l.commitRef);
     return { id: Number(info.lastInsertRowid), ts, ...l };
-  }
-
-  // schedules (Warden Cron) ---------------------------------------------------
-  listSchedules(): ScheduleRow[] {
-    const rows = this.db.prepare("SELECT * FROM schedules ORDER BY name").all() as Record<
-      string,
-      unknown
-    >[];
-    return rows.map((r) => ({
-      id: String(r.id),
-      name: String(r.name),
-      cronExpr: String(r.cron_expr),
-      project: String(r.project),
-      model: String(r.model),
-      prompt: String(r.prompt),
-      allowedUpstreams: String(r.allowed_upstreams),
-      deliveryTarget: String(r.delivery_target),
-      enabled: Number(r.enabled) === 1,
-      lastRunAt: r.last_run_at == null ? null : String(r.last_run_at),
-      lastStatus: r.last_status == null ? null : String(r.last_status),
-      lastOutput: r.last_output == null ? null : String(r.last_output),
-      createdAt: String(r.created_at),
-    }));
-  }
-
-  upsertSchedule(s: Omit<ScheduleRow, "createdAt" | "lastRunAt" | "lastStatus" | "lastOutput"> & {
-    lastRunAt?: string | null;
-    lastStatus?: string | null;
-    lastOutput?: string | null;
-  }): void {
-    const ts = nowIso();
-    this.db
-      .prepare(
-        `INSERT INTO schedules (id, name, cron_expr, project, model, prompt, allowed_upstreams, delivery_target, enabled, last_run_at, last_status, last_output, created_at)
-         VALUES (@id, @name, @cronExpr, @project, @model, @prompt, @allowedUpstreams, @deliveryTarget, @enabled, @lastRunAt, @lastStatus, @lastOutput, @ts)
-         ON CONFLICT(name) DO UPDATE SET
-           cron_expr = @cronExpr,
-           project = @project,
-           model = @model,
-           prompt = @prompt,
-           allowed_upstreams = @allowedUpstreams,
-           delivery_target = @deliveryTarget,
-           enabled = @enabled,
-           last_run_at = COALESCE(@lastRunAt, schedules.last_run_at),
-           last_status = COALESCE(@lastStatus, schedules.last_status),
-           last_output = COALESCE(@lastOutput, schedules.last_output)`
-      )
-      .run({
-        ...s,
-        enabled: s.enabled ? 1 : 0,
-        lastRunAt: s.lastRunAt ?? null,
-        lastStatus: s.lastStatus ?? null,
-        lastOutput: s.lastOutput ?? null,
-        ts,
-      });
-  }
-
-  deleteSchedule(id: string): void {
-    this.db.prepare("DELETE FROM schedules WHERE id = ? OR name = ?").run(id, id);
   }
 }

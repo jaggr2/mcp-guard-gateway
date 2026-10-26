@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from './api.service';
-import type { LearningEntry, ScheduleEntry } from './models';
+import type { LearningEntry } from './models';
 
 @Component({
   selector: 'app-memory',
@@ -72,27 +72,6 @@ import type { LearningEntry, ScheduleEntry } from './models';
           </tbody>
         </table>
       </div>
-
-      <div class="section">
-        <h3>Scheduled Agent Jobs (Warden Cron — replaces Hermes Cron)</h3>
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Cron</th><th>Project</th><th>Model</th><th>Delivery</th><th>Enabled</th></tr>
-          </thead>
-          <tbody>
-            @for (s of schedules(); track s.id) {
-              <tr>
-                <td class="mono">{{ s.name }}</td>
-                <td class="mono">{{ s.cronExpr }}</td>
-                <td class="mono">{{ s.project }}</td>
-                <td class="mono">{{ s.model }}</td>
-                <td>{{ s.deliveryTarget }}</td>
-                <td>{{ s.enabled ? 'yes' : 'no' }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
     </div>
   `,
   styles: `
@@ -112,7 +91,6 @@ import type { LearningEntry, ScheduleEntry } from './models';
 export class MemoryComponent {
   private api = inject(ApiService);
   learnings = signal<LearningEntry[]>([]);
-  schedules = signal<ScheduleEntry[]>([]);
   showAddLearning = signal(false);
 
   lForm: {
@@ -134,9 +112,8 @@ export class MemoryComponent {
   }
 
   async load() {
-    const [l, s] = await Promise.all([this.api.listLearnings(), this.api.listSchedules()]);
+    const l = await this.api.listLearnings();
     this.learnings.set(l.learnings);
-    this.schedules.set(s.schedules);
   }
 
   async submitLearning() {

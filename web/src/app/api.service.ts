@@ -9,7 +9,6 @@ import type {
   ClientRow,
   LearningEntry,
   SandboxEntry,
-  ScheduleEntry,
   StatusInfo,
   ToolEntry,
   Upstream,
@@ -84,7 +83,7 @@ export class ApiService {
     );
   }
 
-  // Central Memory (`jaggr2/agent-memory`) & Cron Schedules -------------------
+  // Central Memory (`jaggr2/agent-memory`) ------------------------------------
   listLearnings() {
     return this.request<{ learnings: LearningEntry[] }>('GET', '/learnings');
   }
@@ -98,24 +97,6 @@ export class ApiService {
     rationale?: string;
   }) {
     return this.request<{ ok: boolean; learning: LearningEntry }>('POST', '/learnings', body);
-  }
-
-  listSchedules() {
-    return this.request<{ schedules: ScheduleEntry[] }>('GET', '/schedules');
-  }
-
-  createSchedule(body: {
-    name: string;
-    cronExpr: string;
-    project?: string;
-    model?: string;
-    prompt: string;
-  }) {
-    return this.request<{ ok: boolean }>('POST', '/schedules', body);
-  }
-
-  deleteSchedule(id: string) {
-    return this.request<{ ok: boolean }>('DELETE', `/schedules/${id}`);
   }
 
   // Upstreams -----------------------------------------------------------------

@@ -154,24 +154,14 @@ CREATE TABLE IF NOT EXISTS learnings (
   commit_ref     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_learnings_ts ON learnings (ts);
-
--- Scheduled agent jobs (Warden Cron — replaces Hermes Cron) --------------------
-CREATE TABLE IF NOT EXISTS schedules (
-  id                TEXT PRIMARY KEY,
-  name              TEXT UNIQUE NOT NULL,
-  cron_expr         TEXT NOT NULL,
-  project           TEXT NOT NULL DEFAULT 'system',
-  model             TEXT NOT NULL DEFAULT 'deepseek-v4-flash',
-  prompt            TEXT NOT NULL,
-  allowed_upstreams TEXT NOT NULL DEFAULT '*',
-  delivery_target   TEXT NOT NULL DEFAULT 'ha_notify',
-  enabled           INTEGER NOT NULL DEFAULT 1,
-  last_run_at       TEXT,
-  last_status       TEXT,
-  last_output       TEXT,
-  created_at        TEXT NOT NULL
-);
 `;
+
+/**
+ * Tables from retired features — dropped idempotently at startup. "Warden Cron"
+ * (schedules) moved to GitHub Actions scheduled workflows; see the homelab
+ * repo's idea_drafts/WARDEN_CRON_MIGRATION_PLAN.md.
+ */
+const LEGACY_DROPS: string[] = ["DROP TABLE IF EXISTS schedules"];
 
 /**
  * Additive column migrations for DBs created before the column existed
@@ -192,6 +182,9 @@ const COLUMN_MIGRATIONS: { table: string; column: string; ddl: string }[] = [
 ];
 
 export function migrate(db: Database.Database): void {
+  for (const ddl of LEGACY_DROPS) {
+    db.exec(ddl);
+  }
   for (const { table, column, ddl } of COLUMN_MIGRATIONS) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!columns.some((c) => c.name === column)) {

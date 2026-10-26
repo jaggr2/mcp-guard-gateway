@@ -100,22 +100,6 @@ export interface LearningEntry {
   commitRef: string | null;
 }
 
-export interface ScheduleEntry {
-  id: string;
-  name: string;
-  cronExpr: string;
-  project: string;
-  model: string;
-  prompt: string;
-  allowedUpstreams: string;
-  deliveryTarget: string;
-  enabled: boolean;
-  lastRunAt: string | null;
-  lastStatus: string | null;
-  lastOutput: string | null;
-  createdAt: string;
-}
-
 export interface StatusInfo {
   publicUrl: string;
   issuers: string[];
