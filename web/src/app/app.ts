@@ -19,6 +19,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Overview</a>
           <a routerLink="/sandboxes" routerLinkActive="active">Sandboxes</a>
           <a routerLink="/browser" routerLinkActive="active">Browser Sessions</a>
+          <a routerLink="/memory" routerLinkActive="active">Memory &amp; Skills</a>
         </div>
 
         <div class="nav-group">
@@ -26,13 +27,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           <a routerLink="/upstreams" routerLinkActive="active">MCP Upstreams</a>
           <a routerLink="/approvals" routerLinkActive="active">HITL Approvals</a>
           <a routerLink="/audit" routerLinkActive="active">Audit Log</a>
-          <a routerLink="/clients" routerLinkActive="active">Clients</a>
         </div>
 
         <div class="nav-group">
           <div class="nav-label">System</div>
-          <a routerLink="/memory" routerLinkActive="active">Memory &amp; Skills</a>
           <a routerLink="/architecture" routerLinkActive="active">Architecture</a>
+          <a routerLink="/clients" routerLinkActive="active">Clients</a>
           <a routerLink="/settings" routerLinkActive="active">Secrets</a>
         </div>
       </nav>

@@ -43,10 +43,10 @@ import { ApiService } from './api.service';
   `,
   styles: `
     .grow { flex: 1; } .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-    .hint { color: #888; font-size: 13px; } .muted { color: #888; } .mono { font-family: monospace; }
-    .danger { color: #c0392b; }
+    .hint { color: var(--text-muted); font-size: 13px; } .muted { color: var(--text-muted); } .mono { font-family: monospace; }
+    .danger { color: var(--danger-text); }
     table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   `,
 })
 export class SettingsComponent {

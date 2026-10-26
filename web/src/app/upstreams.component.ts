@@ -95,12 +95,12 @@ import type { ToolEntry, Upstream } from './models';
   `,
   styles: `
     .grow { flex: 1; } .row { display: flex; gap: 8px; margin: 8px 0; }
-    .row input { padding: 6px; } .muted { color: #888; } .off { opacity: .5; }
+    .row input { padding: 6px; } .muted { color: var(--text-muted); } .off { opacity: .5; }
     .small { font-size: 12px; } .mono { font-family: monospace; }
-    .link { background: none; border: none; color: #4a9eff; cursor: pointer; padding: 0; font-size: 14px; }
-    .danger { color: #c0392b; } .error { color: #c0392b; } .hint { color: #888; font-size: 13px; }
+    .link { background: none; border: none; color: var(--accent-strong); cursor: pointer; padding: 0; font-size: 14px; }
+    .danger { color: var(--danger-text); } .error { color: var(--danger-text); } .hint { color: var(--text-muted); font-size: 13px; }
     table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
     section { margin-top: 24px; }
   `,
 })

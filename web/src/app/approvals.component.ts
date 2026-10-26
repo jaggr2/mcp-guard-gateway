@@ -50,9 +50,9 @@ import type { Approval } from './models';
   `,
   styles: `
     .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-    .muted { color: #888; } .mono { font-family: monospace; } .danger { color: #c0392b; }
+    .muted { color: var(--text-muted); } .mono { font-family: monospace; } .danger { color: var(--danger-text); }
     table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   `,
 })
 export class ApprovalsComponent {

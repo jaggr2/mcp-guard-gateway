@@ -67,14 +67,14 @@ import type { StatusInfo } from './models';
     </div>
   `,
   styles: `
-    .error { color: #c0392b; } .muted { color: #888; } .mono { font-family: monospace; }
+    .error { color: var(--danger-text); } .muted { color: var(--text-muted); } .mono { font-family: monospace; }
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 14px 0 22px; }
-    .kpi { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; }
-    .kpi .label { font-size: 0.78rem; color: #8b949e; }
+    .kpi { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px 14px; }
+    .kpi .label { font-size: 0.78rem; color: var(--text-muted); }
     .kpi .val { font-size: 1.35rem; font-weight: 600; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
-    a { color: #58a6ff; text-decoration: none; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    a { color: var(--accent); text-decoration: none; }
   `,
 })
 export class DashboardComponent {

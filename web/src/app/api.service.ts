@@ -8,6 +8,7 @@ import type {
   BrowserSessionMode,
   ClientRow,
   LearningEntry,
+  MemoryTree,
   SandboxEntry,
   StatusInfo,
   ToolEntry,
@@ -97,6 +98,10 @@ export class ApiService {
     rationale?: string;
   }) {
     return this.request<{ ok: boolean; learning: LearningEntry }>('POST', '/learnings', body);
+  }
+
+  memoryTree() {
+    return this.request<MemoryTree>('GET', '/memory/tree');
   }
 
   // Upstreams -----------------------------------------------------------------

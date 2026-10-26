@@ -129,29 +129,29 @@ import type { SandboxEntry } from './models';
   `,
   styles: `
     .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .muted { color: #8b949e; font-size: 0.9rem; }
+    .muted { color: var(--text-muted); font-size: 0.9rem; }
     .mono { font-family: monospace; }
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+    .card { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 10px; padding: 16px; }
     .form-card { margin-bottom: 20px; }
     .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
-    label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #c9d1d9; }
-    input, select { background: #0d1117; border: 1px solid #30363d; color: #e6edf3; padding: 7px 10px; border-radius: 6px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text); }
+    input, select { background: var(--bg-inset); border: 1px solid var(--border-strong); color: var(--text); padding: 7px 10px; border-radius: 6px; }
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
     .card-top h3 { margin: 6px 0 2px; font-size: 1.1rem; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: #30363d; color: #c9d1d9; margin-right: 6px; text-transform: uppercase; }
-    .badge.running { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: var(--border-strong); color: var(--text); margin-right: 6px; text-transform: uppercase; }
+    .badge.running { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); border: 1px solid var(--accent); }
     .Ide-links, .ide-links { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-    .btn-ide { background: #238636; color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; }
-    .btn-link { color: #58a6ff; text-decoration: none; font-size: 0.8rem; }
-    .btn-primary { background: #1f6feb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
-    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; padding: 10px; background: #0d1117; border-radius: 8px; }
-    .metrics .label { font-size: 0.75rem; color: #8b949e; }
+    .btn-ide { background: var(--ok-text); color: var(--text-on-accent); text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; }
+    .btn-link { color: var(--accent); text-decoration: none; font-size: 0.8rem; }
+    .btn-primary { background: var(--accent); color: var(--text-on-accent); border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; padding: 10px; background: var(--bg-inset); border-radius: 8px; }
+    .metrics .label { font-size: 0.75rem; color: var(--text-muted); }
     .metrics .val { font-size: 0.95rem; font-weight: 600; margin-top: 2px; }
     .card-actions { display: flex; gap: 8px; }
-    .card-actions button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-    .card-actions button.danger { color: #f85149; }
-    .banner { background: #1f6feb22; border: 1px solid #1f6feb; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+    .card-actions button { background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-strong); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+    .card-actions button.danger { color: var(--danger-text); }
+    .banner { background: color-mix(in srgb, var(--accent) 13%, transparent); border: 1px solid var(--accent); padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
   `,
 })
 export class SandboxesComponent {

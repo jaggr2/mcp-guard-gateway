@@ -1,4 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { Hono, type MiddlewareHandler } from "hono";
 import type Database from "better-sqlite3";
 import type { GatewayConfig } from "../config";
@@ -391,6 +393,62 @@ export function registerApi(
     });
     if (!res.ok) return c.json({ error: res.error }, 400);
     return c.json({ ok: true, learning: res.learning });
+  });
+
+  // Memory library tree (agent-memory repo overview) --------------------------
+  api.get("/memory/tree", anyAuth, (c) => {
+    const dir = config.agentMemoryDir;
+    if (!dir || !existsSync(dir)) {
+      return c.json({ error: "agent-memory not mounted", path: dir ?? null }, 503);
+    }
+    const listNames = (p: string): string[] => {
+      try {
+        return readdirSync(p).filter((n) => !n.startsWith("."));
+      } catch {
+        return [];
+      }
+    };
+    const isDir = (p: string): boolean => {
+      try {
+        return statSync(p).isDirectory();
+      } catch {
+        return false;
+      }
+    };
+
+    const skills = listNames(join(dir, "skills"))
+      .filter((name) => isDir(join(dir, "skills", name)))
+      .sort()
+      .map((name) => {
+        const skillDir = join(dir, "skills", name);
+        let description = "";
+        const skillMd = join(skillDir, "SKILL.md");
+        if (existsSync(skillMd)) {
+          const text = readFileSync(skillMd, "utf8").slice(0, 3000);
+          const m = text.match(/^---[\s\S]*?description:[ \t]*(.+)/);
+          if (m) description = m[1].trim().replace(/^["']|["']$/g, "").slice(0, 140);
+        }
+        return { name, description, files: listNames(skillDir).length, path: `skills/${name}` };
+      });
+
+    const memories = listNames(join(dir, "memories"))
+      .sort()
+      .map((name) => ({ name, path: `memories/${name}` }));
+
+    const journal = listNames(join(dir, "journal"))
+      .filter((name) => isDir(join(dir, "journal", name)))
+      .sort()
+      .map((name) => ({
+        name,
+        count: listNames(join(dir, "journal", name)).length,
+        path: `journal/${name}`,
+      }));
+
+    const other = listNames(dir)
+      .filter((name) => !isDir(join(dir, name)))
+      .sort();
+
+    return c.json({ root: dir, skills, memories, journal, other });
   });
 
   // upstreams -----------------------------------------------------------------

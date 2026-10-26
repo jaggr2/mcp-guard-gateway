@@ -157,42 +157,42 @@ function describeError(err: unknown): string {
     </div>
   `,
   styles: `
-    .muted { color: #8b949e; font-size: 0.9rem; }
+    .muted { color: var(--text-muted); font-size: 0.9rem; }
     .mono { font-family: monospace; }
-    .error { color: #c0392b; }
+    .error { color: var(--danger-text); }
     .banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
-    .error-banner { background: #f8514922; border: 1px solid #f85149; color: #f85149; }
+    .error-banner { background: color-mix(in srgb, var(--danger-graphic) 15%, transparent); border: 1px solid var(--danger-text); color: var(--danger-text); }
 
     table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; vertical-align: top; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     tr.clickable { cursor: pointer; }
-    tr.clickable:hover { background: #161b22; }
-    tr.selected { background: #1f3a5f; }
+    tr.clickable:hover { background: var(--bg-surface); }
+    tr.selected { background: var(--accent-bg); }
     .page-title { font-size: 0.9rem; }
     .url { font-size: 0.75rem; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .dot.ready { background: #3fb950; }
-    .dot.booting { background: #d29922; }
-    .dot.stopped { background: #8b949e; }
-    .dot.error { background: #f85149; }
+    .dot.ready { background: var(--ok-graphic); }
+    .dot.booting { background: var(--warn-text); }
+    .dot.stopped { background: var(--text-muted); }
+    .dot.error { background: var(--danger-text); }
 
-    .mode { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: #30363d; color: #c9d1d9; text-transform: uppercase; }
-    .mode.operator { background: #d2992233; color: #d29922; border: 1px solid #d29922; }
+    .mode { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: var(--border-strong); color: var(--text); text-transform: uppercase; }
+    .mode.operator { background: color-mix(in srgb, var(--warn-graphic) 20%, transparent); color: var(--warn-text); border: 1px solid var(--warn-text); }
 
-    .viewer-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+    .viewer-card { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 10px; padding: 16px; margin-bottom: 24px; }
     .viewer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
     .viewer-head h3 { margin: 0 0 4px; font-size: 1.1rem; }
     .viewer-actions { display: flex; gap: 8px; }
     .viewer-actions button { border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
     .viewer-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-takeover { background: #d29922; color: #0d1117; }
-    .btn-release { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-    .hint { font-size: 0.85rem; color: #8b949e; margin: 10px 0; }
-    iframe.vnc { width: 100%; height: 540px; border: 1px solid #30363d; border-radius: 8px; background: #000; display: block; }
-    .btn-link { color: #58a6ff; text-decoration: none; padding: .35rem .9rem; border: 1px solid #30363d; border-radius: 6px; }
-    .btn-link:hover { background: #21262d; }
-    .viewer-off { height: 200px; display: flex; align-items: center; justify-content: center; border: 1px dashed #30363d; border-radius: 8px; color: #8b949e; }
+    .btn-takeover { background: var(--warn-text); color: var(--bg-inset); }
+    .btn-release { background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-strong); }
+    .hint { font-size: 0.85rem; color: var(--text-muted); margin: 10px 0; }
+    iframe.vnc { width: 100%; height: 540px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-inset); display: block; }
+    .btn-link { color: var(--accent); text-decoration: none; padding: .35rem .9rem; border: 1px solid var(--border-strong); border-radius: 6px; }
+    .btn-link:hover { background: var(--bg-elevated); }
+    .viewer-off { height: 200px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border-strong); border-radius: 8px; color: var(--text-muted); }
     .meta { margin-top: 10px; font-size: 0.8rem; }
   `,
 })

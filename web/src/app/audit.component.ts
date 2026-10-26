@@ -40,9 +40,9 @@ import type { AuditRow } from './models';
   `,
   styles: `
     .row { display: flex; gap: 8px; margin: 8px 0; }
-    .muted { color: #888; } .mono { font-family: monospace; }
+    .muted { color: var(--text-muted); } .mono { font-family: monospace; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2a2a2a; }
+    th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
   `,
 })
 export class AuditComponent {

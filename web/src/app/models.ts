@@ -100,6 +100,21 @@ export interface LearningEntry {
   commitRef: string | null;
 }
 
+export interface MemoryTreeSkill {
+  name: string;
+  description: string;
+  files: number;
+  path: string;
+}
+
+export interface MemoryTree {
+  root: string;
+  skills: MemoryTreeSkill[];
+  memories: { name: string; path: string }[];
+  journal: { name: string; count: number; path: string }[];
+  other: string[];
+}
+
 export interface StatusInfo {
   publicUrl: string;
   issuers: string[];

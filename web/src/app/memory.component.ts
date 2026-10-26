@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from './api.service';
-import type { LearningEntry } from './models';
+import type { LearningEntry, MemoryTree } from './models';
 
 @Component({
   selector: 'app-memory',
@@ -15,6 +15,55 @@ import type { LearningEntry } from './models';
         via <code>learn-skill</code> (<code>warden_propose_learning</code>), mounted read-only into every
         OpenCode sandbox and pushed back to GitHub.
       </p>
+
+      <div class="section">
+        <div class="header-row">
+          <h3>Library</h3>
+          <button class="btn-ghost btn-primary" (click)="loadTree()">Refresh</button>
+        </div>
+        @if (treeError()) {
+          <p class="error">agent-memory is not mounted on the server.</p>
+        } @else if (tree(); as t) {
+          <p class="muted mono">{{ t.root }}</p>
+          <div class="tree">
+            <details open>
+              <summary>skills ({{ t.skills.length }})</summary>
+              <div class="tree-grid">
+                @for (s of t.skills; track s.name) {
+                  <div class="tree-item">
+                    <span class="mono tree-name">{{ s.name }}</span>
+                    <span class="muted">{{ s.description }}</span>
+                  </div>
+                } @empty {
+                  <div class="muted">none yet</div>
+                }
+              </div>
+            </details>
+            <details>
+              <summary>memories ({{ t.memories.length }})</summary>
+              @for (m of t.memories; track m.name) {
+                <div class="tree-file mono">├─ {{ m.name }}</div>
+              }
+            </details>
+            <details>
+              <summary>journal ({{ t.journal.length }})</summary>
+              @for (j of t.journal; track j.name) {
+                <div class="tree-file mono">├─ {{ j.name }} ({{ j.count }} entries)</div>
+              }
+            </details>
+            @if (t.other.length) {
+              <details>
+                <summary>root files ({{ t.other.length }})</summary>
+                @for (o of t.other; track o) {
+                  <div class="tree-file mono">├─ {{ o }}</div>
+                }
+              </details>
+            }
+          </div>
+        } @else {
+          <p class="muted">Loading library…</p>
+        }
+      </div>
 
       <div class="section">
         <div class="header-row">
@@ -77,22 +126,31 @@ import type { LearningEntry } from './models';
     </div>
   `,
   styles: `
-    .muted { color: #8b949e; }
+    .muted { color: var(--text-muted); }
     .mono { font-family: monospace; }
     .section { margin-top: 24px; }
     .header-row { display: flex; justify-content: space-between; align-items: center; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; margin: 12px 0; }
+    .card { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 14px; margin: 12px 0; }
     .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
     label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
-    input, select, textarea { background: #0d1117; border: 1px solid #30363d; color: #e6edf3; padding: 6px 8px; border-radius: 6px; }
-    .btn-primary { background: #1f6feb; color: #fff; border: none; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
+    input, select, textarea { background: var(--bg-inset); border: 1px solid var(--border-strong); color: var(--text); padding: 6px 8px; border-radius: 6px; }
+    .btn-primary { background: var(--accent); color: var(--text-on-accent); border: none; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #2a2a2a; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+    .tree { margin-top: var(--sp-2); }
+    .tree details { margin: var(--sp-2) 0; }
+    .tree summary { cursor: pointer; font-weight: 650; color: var(--text); }
+    .tree-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-1) var(--sp-4); margin: var(--sp-2) 0 var(--sp-2) var(--sp-4); }
+    .tree-item { display: flex; gap: var(--sp-2); font-size: var(--fs-sm); overflow: hidden; }
+    .tree-name { color: var(--accent-strong); flex: none; }
+    .tree-file { margin-left: var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
   `,
 })
 export class MemoryComponent {
   private api = inject(ApiService);
   learnings = signal<LearningEntry[]>([]);
+  tree = signal<MemoryTree | null>(null);
+  treeError = signal(false);
   showAddLearning = signal(false);
 
   lForm: {
@@ -111,11 +169,21 @@ export class MemoryComponent {
 
   constructor() {
     void this.load();
+    void this.loadTree();
   }
 
   async load() {
     const l = await this.api.listLearnings();
     this.learnings.set(l.learnings);
+  }
+
+  async loadTree() {
+    try {
+      this.tree.set(await this.api.memoryTree());
+      this.treeError.set(false);
+    } catch {
+      this.treeError.set(true);
+    }
   }
 
   async submitLearning() {
