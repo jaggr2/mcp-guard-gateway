@@ -628,4 +628,80 @@ export class ConfigStore {
       .run(ts, l.sourceProject, l.kind, l.targetPath, l.title, l.content, l.mode, l.rationale, l.status, l.commitRef);
     return { id: Number(info.lastInsertRowid), ts, ...l };
   }
+
+  // usage log (per-project/client LLM consumption) ----------------------------
+
+  usageBreakdown(sinceIso: string): {
+    project: string;
+    provider: string;
+    model: string;
+    requests: number;
+    errors: number;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    reasoningTokens: number;
+    costUsd: number;
+  }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT project, provider, model,
+                COUNT(*) AS requests,
+                COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS errors,
+                COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
+                COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+                COALESCE(SUM(cost_usd), 0) AS cost_usd
+         FROM llm_usage WHERE ts >= ?
+         GROUP BY project, provider, model
+         ORDER BY cost_usd DESC`
+      )
+      .all(sinceIso) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      project: String(r.project),
+      provider: String(r.provider),
+      model: String(r.model),
+      requests: Number(r.requests),
+      errors: Number(r.errors),
+      inputTokens: Number(r.input_tokens),
+      outputTokens: Number(r.output_tokens),
+      cachedTokens: Number(r.cached_tokens),
+      reasoningTokens: Number(r.reasoning_tokens),
+      costUsd: Number(r.cost_usd),
+    }));
+  }
+
+  usageEntries(sinceIso: string, limit = 100): {
+    ts: string;
+    project: string;
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    reasoningTokens: number;
+    costUsd: number;
+    latencyMs: number;
+    status: string;
+    error: string | null;
+  }[] {
+    const rows = this.db
+      .prepare("SELECT * FROM llm_usage WHERE ts >= ? ORDER BY ts DESC LIMIT ?")
+      .all(sinceIso, limit) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      ts: String(r.ts),
+      project: String(r.project),
+      provider: String(r.provider),
+      model: String(r.model),
+      inputTokens: Number(r.input_tokens),
+      outputTokens: Number(r.output_tokens),
+      cachedTokens: Number(r.cached_tokens),
+      reasoningTokens: Number(r.reasoning_tokens),
+      costUsd: Number(r.cost_usd),
+      latencyMs: Number(r.latency_ms),
+      status: String(r.status),
+      error: r.error == null ? null : String(r.error),
+    }));
+  }
 }

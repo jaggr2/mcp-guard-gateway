@@ -499,6 +499,34 @@ export function registerApi(
     return c.json(res, "error" in res ? 400 : 200);
   });
 
+  // Usage log (per-project/client token & cost consumption) --------------------
+  api.get("/usage/log", anyAuth, (c) => {
+    const period = c.req.query("period") ?? "24h";
+    const hours = period === "30d" ? 24 * 30 : period === "7d" ? 24 * 7 : 24;
+    const since = new Date(Date.now() - hours * 3600_000).toISOString();
+    const project = c.req.query("project") || undefined;
+
+    let breakdown = configStore.usageBreakdown(since);
+    let entries = configStore.usageEntries(since, 200);
+    if (project) {
+      breakdown = breakdown.filter((b) => b.project === project);
+      entries = entries.filter((e) => e.project === project);
+    }
+    const totals = breakdown.reduce(
+      (acc, b) => ({
+        costUsd: acc.costUsd + b.costUsd,
+        requests: acc.requests + b.requests,
+        errors: acc.errors + b.errors,
+        inputTokens: acc.inputTokens + b.inputTokens,
+        outputTokens: acc.outputTokens + b.outputTokens,
+        cachedTokens: acc.cachedTokens + b.cachedTokens,
+        reasoningTokens: acc.reasoningTokens + b.reasoningTokens,
+      }),
+      { costUsd: 0, requests: 0, errors: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 }
+    );
+    return c.json({ period, since, project: project ?? null, totals, breakdown, entries: entries.slice(0, 100) });
+  });
+
   // Skill sources (source_url frontmatter → check/update against upstream) ----
   api.get("/memory/skills/sources", anyAuth, (c) => {
     const dir = config.agentMemoryDir;

@@ -141,6 +141,51 @@ export interface SkillCheckResult {
   diff: string[];
 }
 
+export interface UsageBreakdownRow {
+  project: string;
+  provider: string;
+  model: string;
+  requests: number;
+  errors: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  costUsd: number;
+}
+
+export interface UsageEntry {
+  ts: string;
+  project: string;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  costUsd: number;
+  latencyMs: number;
+  status: string;
+  error: string | null;
+}
+
+export interface UsageLog {
+  period: string;
+  since: string;
+  project: string | null;
+  totals: {
+    costUsd: number;
+    requests: number;
+    errors: number;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    reasoningTokens: number;
+  };
+  breakdown: UsageBreakdownRow[];
+  entries: UsageEntry[];
+}
+
 export interface StatusInfo {
   publicUrl: string;
   issuers: string[];

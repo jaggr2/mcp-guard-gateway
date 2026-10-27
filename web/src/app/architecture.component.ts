@@ -316,10 +316,15 @@ type Health = 'ok' | 'warn' | 'danger' | 'neutral';
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: var(--r-lg);
-      overflow: hidden;
+      overflow-x: auto;
     }
 
     svg { display: block; width: 100%; height: auto; }
+
+    /* phones: keep the map legible — pan it horizontally instead of shrinking text */
+    @media (max-width: 820px) {
+      svg { min-width: 1080px; }
+    }
 
     /* zones */
     .zone { fill: rgba(15, 23, 42, 0.35); stroke: var(--border-strong); stroke-dasharray: 8 4; }

@@ -151,7 +151,7 @@ import type { LearningEntry, MemoryTree } from './models';
     .tree details { margin: var(--sp-2) 0; }
     .tree summary { cursor: pointer; font-weight: 650; color: var(--text); }
     .tree-sub summary { font-weight: 500; color: var(--text-muted); }
-    .tree-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-1) var(--sp-4); margin: var(--sp-2) 0 var(--sp-2) var(--sp-4); }
+    .tree-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: var(--sp-1) var(--sp-4); margin: var(--sp-2) 0 var(--sp-2) var(--sp-4); }
     .tree-item { display: flex; gap: var(--sp-2); font-size: var(--fs-sm); overflow: hidden; }
     .tree-name { color: var(--accent-strong); flex: none; }
     .tree-file { margin-left: var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }

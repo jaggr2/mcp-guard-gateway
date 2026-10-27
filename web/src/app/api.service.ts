@@ -16,6 +16,7 @@ import type {
   StatusInfo,
   ToolEntry,
   Upstream,
+  UsageLog,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -142,6 +143,11 @@ export class ApiService {
     return this.request<{ ok: boolean; commitRef: string | null }>('POST', '/memory/skills/update', {
       name,
     });
+  }
+
+  usageLog(period: string, project?: string) {
+    const q = 'period=' + encodeURIComponent(period) + (project ? '&project=' + encodeURIComponent(project) : '');
+    return this.request<UsageLog>('GET', '/usage/log?' + q);
   }
 
   // Upstreams -----------------------------------------------------------------

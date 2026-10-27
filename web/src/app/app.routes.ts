@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
+import { UsageComponent } from './usage.component';
 import { SandboxesComponent } from './sandboxes.component';
 import { BrowserComponent } from './browser.component';
 import { MemoryComponent } from './memory.component';
@@ -14,6 +15,7 @@ import { ArchitectureComponent } from './architecture.component';
 
 export const routes: Routes = [
   { path: '', component: DashboardComponent },
+  { path: 'usage', component: UsageComponent },
   { path: 'sandboxes', component: SandboxesComponent },
   { path: 'browser', component: BrowserComponent },
   { path: 'memory', component: MemoryComponent },

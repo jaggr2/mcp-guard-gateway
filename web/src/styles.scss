@@ -262,3 +262,18 @@ input:focus, select:focus, textarea:focus {
 
 .error { color: var(--danger-text); }
 a { color: var(--accent-strong); }
+
+/* ---------- responsive (phones; e.g. Galaxy S24+ ≈ 360–412px CSS) ---------- */
+
+@media (max-width: 820px) {
+  .page-title { font-size: var(--fs-lg); }
+  .page-subtitle { font-size: var(--fs-base); margin-bottom: var(--sp-4); }
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .card { padding: var(--sp-3); }
+
+  /* wide tables scroll horizontally instead of blowing out the page */
+  table { display: block; overflow-x: auto; max-width: 100%; }
+
+  .header-row, .row { flex-wrap: wrap; }
+  .btn, button { font-size: var(--fs-base); }
+}
