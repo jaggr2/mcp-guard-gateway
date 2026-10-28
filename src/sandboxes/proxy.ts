@@ -252,6 +252,19 @@ export async function handleSandboxReverseProxy(
   try {
     const forwardHeaders = new Headers(request.headers);
     forwardHeaders.set("accept-encoding", "identity");
+    // The browser talks to this proxy same-origin, so its requests carry
+    // `Origin`/`Referer`/`Sec-Fetch-*` for the PUBLIC host (e.g.
+    // https://oc-server.jaggi.xyz). OpenCode enforces same-origin strictly on
+    // its API: any request whose Origin does not match the upstream URL it is
+    // reached at is rejected with 401 — every web-UI mutation dies that way,
+    // while GETs (no Origin) keep working. fetch() below rewrites `Host` to the
+    // upstream URL anyway, so these browser-hop headers are meaningless
+    // upstream. Drop them so proxied requests look like plain same-origin API
+    // calls; CSRF stays covered by the OpenCode session cookie (SameSite=Lax,
+    // HttpOnly) and this gateway's own edge auth.
+    for (const h of ["origin", "referer", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user"]) {
+      forwardHeaders.delete(h);
+    }
 
     const res = await fetch(targetUrl, {
       method: request.method,

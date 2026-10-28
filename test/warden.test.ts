@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import {
   enforceRepoBoundary,
@@ -248,5 +248,68 @@ describe("Warden App Routes (/llm, /aws-creds, /git-creds, *.oc.jaggi.xyz, /api/
     expect(haJson.online).toBe(true);
     expect(haJson.sandboxes.some((s) => s.slug === "rsearch")).toBe(true);
     expect(haJson.sandboxes.some((s) => s.slug === "test-proj")).toBe(true);
+  });
+
+  it("strips browser Origin/Referer/Sec-Fetch headers before proxying to the OpenCode upstream", async () => {
+    const app = createApp({
+      DB_PATH: ":memory:",
+      PUBLIC_URL: "https://warden.jaggi.xyz",
+      SECRET_MASTER_KEY: "test-master-key",
+    });
+
+    const provRes = await app.request(
+      "https://warden.jaggi.xyz/api/sandboxes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Remote-Email": "roger@jaggi.xyz",
+          "Remote-Groups": "admins",
+        },
+        body: JSON.stringify({
+          slug: "origin-proj",
+          displayName: "Origin Test",
+          template: "fullstack",
+          dailyBudgetUsd: 0.0001,
+        }),
+      },
+      trustedEnv()
+    );
+    expect(provRes.status).toBe(200);
+
+    // Capture what the sandbox reverse proxy forwards upstream. OpenCode 401s
+    // any API request carrying an Origin that does not match the upstream URL
+    // (i.e. every web-UI mutation behind this proxy), so the browser-hop
+    // headers must be dropped before forwarding.
+    let forwarded: Headers | undefined;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", async (_input: string | URL | Request, init?: RequestInit) => {
+      forwarded = new Headers(init?.headers);
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    });
+    try {
+      const res = await app.request("https://origin-proj.oc.jaggi.xyz/api/session", {
+        method: "POST",
+        headers: {
+          Host: "origin-proj.oc.jaggi.xyz",
+          Origin: "https://origin-proj.oc.jaggi.xyz",
+          Referer: "https://origin-proj.oc.jaggi.xyz/app",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          Cookie: "opencode_session_4098=abc",
+        },
+        body: "{}",
+      });
+      expect(res.status).toBe(200);
+      expect(forwarded).toBeDefined();
+      expect(forwarded!.get("origin")).toBeNull();
+      expect(forwarded!.get("referer")).toBeNull();
+      expect(forwarded!.get("sec-fetch-site")).toBeNull();
+      // the session cookie and the rest still reach the upstream
+      expect(forwarded!.get("cookie")).toContain("opencode_session_4098");
+      expect(forwarded!.get("accept-encoding")).toBe("identity");
+    } finally {
+      vi.stubGlobal("fetch", realFetch);
+    }
   });
 });
