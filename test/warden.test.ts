@@ -312,4 +312,71 @@ describe("Warden App Routes (/llm, /aws-creds, /git-creds, *.oc.jaggi.xyz, /api/
       vi.stubGlobal("fetch", realFetch);
     }
   });
+
+  it("authenticates google-native LLM calls via x-goog-api-key and never forwards the sandbox token upstream", async () => {
+    const app = createApp({
+      DB_PATH: ":memory:",
+      PUBLIC_URL: "https://warden.jaggi.xyz",
+      SECRET_MASTER_KEY: "test-master-key",
+    });
+
+    const provRes = await app.request(
+      "https://warden.jaggi.xyz/api/sandboxes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Remote-Email": "roger@jaggi.xyz",
+          "Remote-Groups": "admins",
+        },
+        body: JSON.stringify({
+          slug: "google-proj",
+          displayName: "Google Native",
+          template: "fullstack",
+        }),
+      },
+      trustedEnv()
+    );
+    expect(provRes.status).toBe(200);
+    const { sandboxToken } = (await provRes.json()) as { sandboxToken: string };
+
+    // Upstream key resolution falls back to the provider env var in tests.
+    process.env.OPENCODE_GO_API_KEY = "test-upstream-key";
+
+    let forwarded: Headers | undefined;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", async (_input: string | URL | Request, init?: RequestInit) => {
+      forwarded = new Headers(init?.headers);
+      return new Response('{"model":"gemini-4-argon","usage":{"prompt_tokens":1,"completion_tokens":1}}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    try {
+      // google-native clients (google-* SDK packages) authenticate with
+      // x-goog-api-key — this used to 401 before the header was accepted.
+      const res = await app.request(
+        "https://warden.jaggi.xyz/llm/opencode-go/v1/models/gemini-4-argon:generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": sandboxToken,
+          },
+          body: JSON.stringify({ contents: [] }),
+        }
+      );
+      expect(res.status).toBe(200);
+      expect(forwarded).toBeDefined();
+      // upstream auth is rebuilt from the configured key, never the sandbox token
+      expect(forwarded!.get("x-goog-api-key")).toBe("test-upstream-key");
+      expect(forwarded!.get("authorization")).toBe("Bearer test-upstream-key");
+      for (const [, v] of forwarded!) {
+        expect(v).not.toBe(sandboxToken);
+      }
+    } finally {
+      vi.stubGlobal("fetch", realFetch);
+      delete process.env.OPENCODE_GO_API_KEY;
+    }
+  });
 });

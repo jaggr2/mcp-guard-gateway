@@ -83,6 +83,12 @@ export function extractBearerOrApiKey(request: Request): string | null {
   if (xKey) {
     return xKey.trim();
   }
+  // Google-native Gemini clients (google-* SDK packages) authenticate via
+  // x-goog-api-key instead — accept it so gemini-* models can use the proxy.
+  const googKey = request.headers.get("x-goog-api-key");
+  if (googKey) {
+    return googKey.trim();
+  }
   return null;
 }
 
@@ -221,7 +227,7 @@ export async function handleLlmProxy(
   // Forward the client's headers (session id, content negotiation, ...) but rebuild auth.
   const headers = new Headers();
   for (const [k, v] of request.headers) {
-    if (!["host", "content-length", "authorization", "x-api-key", "accept-encoding", "connection"].includes(k)) {
+    if (!["host", "content-length", "authorization", "x-api-key", "x-goog-api-key", "accept-encoding", "connection"].includes(k)) {
       headers.set(k, v);
     }
   }
@@ -242,6 +248,15 @@ export async function handleLlmProxy(
   }
   if (!targetUrl.includes("/anthropic/")) {
     headers.delete("x-api-key");
+  }
+  // Google-native Gemini API authenticates via x-goog-api-key — rebuild it from
+  // the resolved upstream key (the client-supplied value is the sandbox token and
+  // must never reach the upstream).
+  const googleStyle = targetUrl.includes("/google/");
+  if (googleStyle) {
+    headers.set("x-goog-api-key", upstreamKey);
+  } else {
+    headers.delete("x-goog-api-key");
   }
   headers.set("Authorization", `Bearer ${upstreamKey}`);
 
