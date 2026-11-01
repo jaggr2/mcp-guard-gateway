@@ -10,11 +10,12 @@ import type {
 } from "./types";
 
 const APPROVAL_COLUMNS =
-  "id, tool, args, reason, status, timeout_action, ttl_minutes, created_at, expires_at, result, hermes_message_key, hermes_user_id";
+  "id, kind, tool, args, reason, status, timeout_action, ttl_minutes, created_at, expires_at, result, hermes_message_key, hermes_user_id";
 
 function rowToApproval(row: Record<string, unknown>): ApprovalRow {
   return {
     id: String(row.id),
+    kind: (row.kind as ApprovalRow["kind"]) ?? "upstream",
     tool: String(row.tool),
     args: String(row.args),
     reason: String(row.reason),
@@ -95,10 +96,11 @@ export class SqliteStore implements Store {
     this.db
       .prepare(
         `INSERT INTO approvals (${APPROVAL_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         row.id,
+        row.kind ?? "upstream",
         row.tool,
         row.args,
         row.reason,
