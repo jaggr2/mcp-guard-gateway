@@ -26,6 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_caller ON audit (caller_id);
 
 CREATE TABLE IF NOT EXISTS approvals (
   id                 TEXT PRIMARY KEY,
+  kind               TEXT NOT NULL DEFAULT 'upstream',  -- upstream | generic (REST-created, no upstream call)
   tool               TEXT NOT NULL,
   args               TEXT NOT NULL,
   reason             TEXT NOT NULL,
@@ -178,6 +179,11 @@ const COLUMN_MIGRATIONS: { table: string; column: string; ddl: string }[] = [
     table: "projects",
     column: "browser_internal_targets",
     ddl: "ALTER TABLE projects ADD COLUMN browser_internal_targets TEXT NOT NULL DEFAULT ''",
+  },
+  {
+    table: "approvals",
+    column: "kind",
+    ddl: "ALTER TABLE approvals ADD COLUMN kind TEXT NOT NULL DEFAULT 'upstream'",
   },
 ];
 

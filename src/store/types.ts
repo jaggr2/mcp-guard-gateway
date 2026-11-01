@@ -2,6 +2,13 @@ export type Decision = "auto-audited" | "approved" | "denied" | "expired";
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired";
 
+/**
+ * `upstream`: created by the MCP HITL guard — approving executes the guarded
+ * upstream call exactly once. `generic`: created over REST — the approval
+ * itself is the outcome, nothing runs upstream.
+ */
+export type ApprovalKind = "upstream" | "generic";
+
 export interface AuditRow {
   id: number;
   ts: string;
@@ -29,6 +36,7 @@ export type NewAuditRow = {
 
 export interface ApprovalRow {
   id: string;
+  kind: ApprovalKind;
   tool: string;
   args: string;
   reason: string;
@@ -46,8 +54,9 @@ export interface ApprovalRow {
 
 export type NewApprovalRow = Omit<
   ApprovalRow,
-  "status" | "result" | "hermes_message_key" | "hermes_user_id" | "expires_at"
+  "status" | "result" | "hermes_message_key" | "hermes_user_id" | "expires_at" | "kind"
 > & {
+  kind?: ApprovalKind;
   status?: ApprovalStatus;
   expires_at?: string | null;
   result?: string | null;

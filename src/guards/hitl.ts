@@ -85,6 +85,74 @@ export async function startApproval(
   return { approval_id: approvalId, status: "pending" };
 }
 
+export interface GenericApprovalInput {
+  tool: string;
+  args: Record<string, unknown>;
+  reason: string;
+  /** Approval TTL in minutes (default 30). */
+  ttlMinutes?: number;
+  /** What happens without a human decision (default "deny", fail-closed). */
+  timeoutAction?: "deny" | "approve";
+}
+
+/**
+ * REST entry point for generic HITL approvals (e.g. the OpenCode
+ * `credential-hitl` plugin): the approval itself is the outcome, nothing runs
+ * upstream on approve. Mirrors `startApproval` (row + Hermes card, async
+ * handleId pattern) and is picked up by the same HA card / Warden UI / decision
+ * endpoints as MCP-guard approvals.
+ */
+export async function startGenericApproval(deps: Deps, input: GenericApprovalInput): Promise<StartedApproval> {
+  const now = Date.now();
+  const approvalId = `apr_${crypto.randomUUID().slice(0, 12)}`;
+  const ttlMinutes = input.ttlMinutes ?? 30;
+  const timeoutAction = input.timeoutAction ?? "deny";
+  const expiresAt = new Date(now + ttlMinutes * 60_000).toISOString();
+
+  await deps.store.createApproval({
+    id: approvalId,
+    kind: "generic",
+    tool: input.tool,
+    args: JSON.stringify(input.args),
+    reason: input.reason,
+    timeout_action: timeoutAction,
+    ttl_minutes: ttlMinutes,
+    created_at: new Date(now).toISOString(),
+    expires_at: expiresAt,
+  });
+
+  const messageKey = await deps.hermes.sendApprovalCard(input.tool, input.reason, input.args, approvalId);
+  if (messageKey !== null) {
+    await deps.store.setApprovalHermesKey(approvalId, messageKey);
+  }
+
+  return { approval_id: approvalId, status: "pending" };
+}
+
+/**
+ * Applies the lazy expiry bookkeeping for a pending row past its `expires_at`
+ * (the timeout policy is snapshotted on the row at creation time) and returns
+ * the row with an up-to-date status. Shared by the MCP poll (`checkApproval`)
+ * and the REST status endpoint — neither path executes upstream work here.
+ */
+export async function settleExpiry(deps: Deps, row: ApprovalRow): Promise<ApprovalRow> {
+  if (row.status !== "pending" || !isExpired(row)) {
+    return row;
+  }
+  if (row.timeout_action === "approve") {
+    await deps.store.setApprovalStatus(row.id, "approved");
+    const updated: ApprovalRow = { ...row, status: "approved" };
+    await notifyResolved(deps, updated);
+    return updated;
+  }
+  await deps.store.setApprovalStatus(row.id, "expired");
+  await recordAudit({ store: deps.store, callerId: deps.callerId }, row.tool, JSON.parse(row.args), row.reason, "expired", {
+    expiresAt: row.expires_at,
+  });
+  await notifyResolved(deps, row);
+  return { ...row, status: "expired" };
+}
+
 /**
  * Poll entry point: resolves a pending/approved approval, executing the upstream
  * call exactly once on approval. Returns the real upstream result on `approved`,
@@ -117,21 +185,13 @@ export async function checkApproval(deps: Deps, approvalId: string): Promise<Cal
     case "expired":
       return errorResult(`Approval ${approvalId} expired without approval`);
     case "pending": {
-      if (!isExpired(row)) {
+      const settled = await settleExpiry(deps, row);
+      if (settled.status === "pending") {
         return pendingResult(approvalId);
       }
-      // Timeout policy is snapshotted on the approval row at creation time.
-      if (row.timeout_action === "approve") {
-        await deps.store.setApprovalStatus(approvalId, "approved");
-        const updated: ApprovalRow = { ...row, status: "approved" };
-        await notifyResolved(deps, updated);
-        return runApproved(deps, updated);
+      if (settled.status === "approved") {
+        return runApproved(deps, settled);
       }
-      await deps.store.setApprovalStatus(approvalId, "expired");
-      await recordAudit({ store: deps.store, callerId: deps.callerId }, row.tool, JSON.parse(row.args), row.reason, "expired", {
-        expiresAt: row.expires_at,
-      });
-      await notifyResolved(deps, row);
       return errorResult(`Approval ${approvalId} expired without approval (timeout_action: deny)`);
     }
   }
@@ -152,16 +212,22 @@ async function runApproved(deps: Deps, row: ApprovalRow): Promise<CallToolResult
   }
 
   let result: CallToolResult;
-  try {
-    const client = deps.registry.get(row.tool.split("_")[0]);
-    if (!client) {
-      throw new Error("upstream unavailable");
+  if (row.kind === "generic") {
+    // Generic (REST-created) approvals have no upstream call: the approval
+    // itself is the outcome. The claim pattern above keeps polls exactly-once.
+    result = jsonResult({ approval_id: row.id, status: "approved", approved_by: row.hermes_user_id });
+  } else {
+    try {
+      const client = deps.registry.get(row.tool.split("_")[0]);
+      if (!client) {
+        throw new Error("upstream unavailable");
+      }
+      result = await client.callTool(upstreamName(deps, row.tool), JSON.parse(row.args), deps.callerId);
+    } catch (err) {
+      result = errorResult(
+        `Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
-    result = await client.callTool(upstreamName(deps, row.tool), JSON.parse(row.args), deps.callerId);
-  } catch (err) {
-    result = errorResult(
-      `Upstream execution failed: ${err instanceof Error ? err.message : String(err)}`
-    );
   }
 
   await deps.store.setApprovalResult(row.id, JSON.stringify(result));

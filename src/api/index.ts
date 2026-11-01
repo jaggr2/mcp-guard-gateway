@@ -7,6 +7,7 @@ import type { GatewayConfig } from "../config";
 import type { HermesBridge } from "../hermes/bridge";
 import { NoopHermesBridge } from "../hermes/bridge";
 import { buildDeps } from "../mcp";
+import { settleExpiry, startGenericApproval } from "../guards/hitl";
 import { deleteMemoryFile, readMemoryFile, writeMemoryFile } from "../memory/files";
 import {
   checkSkillSource,
@@ -743,6 +744,86 @@ export function registerApi(
         created_at: r.created_at,
         expires_at: r.expires_at,
       })),
+    });
+  });
+
+  /**
+   * Create a generic HITL approval — the REST counterpart of the MCP
+   * `guard=hitl` async handleId pattern, for callers whose gated action is not
+   * an upstream MCP call (e.g. the OpenCode `credential-hitl` plugin). The
+   * approval itself is the outcome: nothing executes upstream on approve.
+   * The HA actionable push, Warden UI row and decision endpoints all treat it
+   * like any other approval.
+   *
+   * Auth: any authenticated caller (sandbox/service token or trusted-ingress
+   * identity). Deciding stays operator-only (resolve / decide / latest-decision).
+   */
+  api.post("/approvals", anyAuth, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      tool?: unknown;
+      reason?: unknown;
+      args?: unknown;
+      ttlMinutes?: unknown;
+      timeoutAction?: unknown;
+    } | null;
+
+    const tool = typeof body?.tool === "string" ? body.tool.trim() : "";
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    if (!tool || tool.length > 200) {
+      return c.json({ error: "tool is required (max 200 chars)" }, 400);
+    }
+    if (!reason || reason.length > 500) {
+      return c.json({ error: "reason is required (max 500 chars)" }, 400);
+    }
+    const args =
+      body?.args && typeof body.args === "object" && !Array.isArray(body.args)
+        ? (body.args as Record<string, unknown>)
+        : {};
+    const ttlMinutes = body?.ttlMinutes === undefined ? 30 : Number(body.ttlMinutes);
+    if (!Number.isInteger(ttlMinutes) || ttlMinutes < 0 || ttlMinutes > 240) {
+      return c.json({ error: "ttlMinutes must be an integer 0..240" }, 400);
+    }
+    const timeoutAction = body?.timeoutAction === "approve" ? "approve" : "deny";
+
+    const deps = buildDeps(config, db, c.get("auth").callerId, c.get("auth").groups, notifier);
+    const started = await startGenericApproval(deps, {
+      tool,
+      reason,
+      // Record who asked so the human can decide with full context.
+      args: { caller: c.get("auth").callerId, ...args },
+      ttlMinutes,
+      timeoutAction,
+    });
+    const row = await deps.store.getApproval(started.approval_id);
+    return c.json({
+      ok: true,
+      approval_id: started.approval_id,
+      status: "pending",
+      expires_at: row?.expires_at ?? null,
+    });
+  });
+
+  /**
+   * Poll one approval by id — REST counterpart of the MCP `check_approval_status`
+   * bookkeeping (status + lazy expiry), without upstream execution. Used by the
+   * OpenCode `credential-hitl` plugin to park until a human decides.
+   */
+  api.get("/approvals/:id", anyAuth, async (c) => {
+    const deps = buildDeps(config, db, c.get("auth").callerId, c.get("auth").groups, notifier);
+    const row = await deps.store.getApproval(c.req.param("id"));
+    if (!row) {
+      return c.json({ error: "not found" }, 404);
+    }
+    const settled = await settleExpiry(deps, row);
+    return c.json({
+      approval_id: settled.id,
+      tool: settled.tool,
+      reason: settled.reason,
+      status: settled.status,
+      created_at: settled.created_at,
+      expires_at: settled.expires_at,
+      timeout_action: settled.timeout_action,
+      decided_by: settled.hermes_user_id,
     });
   });
 
